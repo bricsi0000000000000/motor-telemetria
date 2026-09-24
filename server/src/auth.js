@@ -6,8 +6,8 @@ import { timingSafeEqual } from 'node:crypto'
  * Egyfelhasználós szerver: nincs regisztráció és nincs munkamenet, csak egy
  * megosztott token. A telefon és a webes felület ugyanezt küldi minden kérésnél.
  *
- * A token nincs a forrásban: a `server/.env` fájlból vagy a systemd/launchd unit
- * `Environment=` sorából jön. Alapértelmezett érték szándékosan nincs – egy
+ * A token nincs a forrásban: a `server/.env` fájlból vagy a szolgáltatás
+ * unitjának környezeti változójából jön. Alapértelmezett érték szándékosan nincs – egy
  * beégetett default a publikus repóval együtt mindenki számára ismertté válna.
  */
 export const TOKEN = process.env.MOTOR_TOKEN?.trim() || ''

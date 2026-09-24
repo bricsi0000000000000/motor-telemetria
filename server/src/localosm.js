@@ -19,11 +19,21 @@ const here = dirname(fileURLToPath(import.meta.url))
  * kivonat - abból ugyanez az adat 2-3 másodperc alatt kijön, pontosabban
  * (országos, nem csak a megye) és külső szolgáltatás nélkül.
  *
- * Az `osmium` egy önálló eszköz (brew install osmium-tool). Ha nincs meg, a
+ * Az `osmium` egy önálló eszköz (osmium-tool csomag). Ha nincs meg, a
  * hívó visszaeshet az Overpassra - ezért dob beszédes hibát.
  */
 
-const OSMIUM = process.env.OSMIUM_BIN || '/opt/homebrew/bin/osmium'
+/**
+ * Az osmium helye: `OSMIUM_BIN`, egyébként a PATH első találata. Beégetett
+ * útvonal helyett azért keresés, mert a csomagkezelők máshova telepítik.
+ */
+function resolveOsmium() {
+  if (process.env.OSMIUM_BIN) return process.env.OSMIUM_BIN
+  const dirs = (process.env.PATH || '').split(':').filter(Boolean)
+  return dirs.map((dir) => join(dir, 'osmium')).find(existsSync) || 'osmium'
+}
+
+const OSMIUM = resolveOsmium()
 
 /** A Valhalla ide tölti a kivonatot; a konténer frissítésekor magától újul. */
 const DEFAULT_PBF_DIR = join(here, '..', 'valhalla', 'custom_files')
@@ -58,7 +68,7 @@ function kindOf(tags) {
 export async function extractPoints() {
   const pbf = findExtract()
   if (!pbf) throw new Error('Nincs helyi OSM kivonat (server/valhalla/custom_files/*.osm.pbf).')
-  if (!osmiumAvailable()) throw new Error(`Az osmium nem található (${OSMIUM}). Telepítés: brew install osmium-tool`)
+  if (!osmiumAvailable()) throw new Error(`Az osmium nem található (${OSMIUM}). Telepítsd az osmium-tool csomagot, vagy add meg az OSMIUM_BIN változóval.`)
 
   const work = await mkdtemp(join(tmpdir(), 'motor-osm-'))
   try {

@@ -1,10 +1,11 @@
 #!/usr/bin/env bash
-# Fordítás a saját, home könyvtárba telepített eszközlánccal.
+# Fordítás a felhasználói könyvtárba telepített eszközlánccal, root jog nélkül.
 #   ./build.sh              -> debug APK
 #   ./build.sh installDebug -> fordít és felrakja a csatlakoztatott telefonra
 set -euo pipefail
 
-# A projekt két gépen is fordul, ezért az eszközlánc helye platformfüggő.
+# Az eszközlánc szokásos helye platformonként más; a JAVA_HOME és az
+# ANDROID_HOME környezeti változóval bármikor felülírható.
 if [ "$(uname)" = "Darwin" ]; then
     export JAVA_HOME="${JAVA_HOME:-/opt/homebrew/opt/openjdk@17/libexec/openjdk.jdk/Contents/Home}"
     export ANDROID_HOME="${ANDROID_HOME:-$HOME/Library/Android/sdk}"

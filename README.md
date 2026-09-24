@@ -9,7 +9,7 @@ Két rész:
 | Rész | Hol fut | Mit csinál |
 |---|---|---|
 | `app/` | telefon (Android) | mérés, térkép, túranapló, statisztika, elemzés, szinkron |
-| `server/` | ez a linuxos gép | Node/Express API + SQLite, túraelemzés, systemd alól indul |
+| `server/` | a szerver gépe | Node/Express API + SQLite, túraelemzés, szolgáltatásként indul |
 | `server/valhalla/` | a szerver gépe | helyi útvonaltervező motor (Docker), az útvonaltervezéshez |
 
 ## Mit tud
@@ -210,7 +210,7 @@ hívás). **Elég a kulcsot beírni** a `server/.env` fájlba:
 WAZE_API_KEY=ide-jon-a-kulcs
 ```
 
-(vagy a systemd unitba `Environment=WAZE_API_KEY=…` alakban).
+(vagy a szolgáltatás unitjának környezeti változói közé).
 
 A végpontot (`https://api.wazeapi.com/v1/alerts?bottom-left=…&top-right=…`), az
 `X-API-Key` fejlécet és az európai adatközpontot (`X-Country: eur`) a szerver
@@ -298,14 +298,14 @@ Minden beállítás egy helyen (Túrák vagy Statisztika fül → fogaskerék):
 
 ## Szerver és szinkron
 
-A telefon Tailscale-en keresztül éri el a linuxos gépen futó backendet, a gép
+A telefon Tailscale-en keresztül éri el a szervergépen futó backendet, a gép
 tailnet IP-jén vagy MagicDNS nevén (`http://<gep>.<tailnet>.ts.net:8787`). A
 tényleges cím nincs a repóban: fordításkor a `secrets.properties` adja, futás
 közben pedig az app **Statisztika** fülén bármikor átírható.
 
 Nincs felhasználókezelés: egyetlen megosztott token véd, amit a telefon az
 `X-Motor-Token` fejlécben küld. A token sincs a forrásban – a szerveren a
-`server/.env` (vagy a systemd/launchd unit `Environment=` sora) adja a
+`server/.env` (vagy a szolgáltatás unitjának környezeti változója) adja a
 `MOTOR_TOKEN` változóban, a telefonon a `secrets.properties`. Alapértelmezett
 értéke szándékosan nincs: hiányzó `MOTOR_TOKEN` esetén a szerver el sem indul.
 Generálás:
@@ -337,39 +337,36 @@ szerver vissza nem igazolja.
 
 ### Backend indítása
 
-Már fut, és bekapcsoláskor magától indul (`systemd --user`, linger bekapcsolva):
+Kézzel:
 
 ```bash
-systemctl --user status motor-telemetria
+cd server && npm start
 ```
 
-Napló:
-
-```bash
-journalctl --user -u motor-telemetria -f
-```
+Tartós üzemhez a rendszer szolgáltatáskezelőjére érdemes bízni, hogy induláskor
+magától feljöjjön és hiba után újrainduljon. A port, a token és a Waze-kulcs a
+`server/.env` fájlból jön, de a unit környezeti változói felül is írhatják.
 
 Az adatbázis: `server/data/motor.db` (SQLite, WAL módban).
 
-#### macOS-en (launchd)
-
-A Mac ugyanezt a szervert `launchd` user agentből futtatja, bejelentkezéskor
-indul, és kilépés esetén magától újraindul:
+#### systemd user service
 
 ```bash
-launchctl print gui/$(id -u)/com.motortelemetria.server
+systemctl --user status motor-telemetria      # állapot
+journalctl --user -u motor-telemetria -f      # napló
 ```
 
-Az agent leírója: `~/Library/LaunchAgents/com.motortelemetria.server.plist`
-(port, token és a Waze-kulcs a `server/.env` fájlból jön, de az
-`EnvironmentVariables` alatt felül is írható).
-Napló: `~/Library/Logs/motor-telemetria.log`.
+A gép bekapcsolásakor is induljon, bejelentkezés nélkül: `loginctl enable-linger`.
 
-Újraindítás a plist módosítása után:
+#### launchd user agent
 
 ```bash
-launchctl kickstart -k gui/$(id -u)/com.motortelemetria.server
+launchctl print gui/$(id -u)/com.motortelemetria.server        # állapot
+launchctl kickstart -k gui/$(id -u)/com.motortelemetria.server # újraindítás
 ```
+
+Az agent leírója: `~/Library/LaunchAgents/com.motortelemetria.server.plist`,
+naplója: `~/Library/Logs/motor-telemetria.log`.
 
 ## Útvonaltervezés
 
@@ -463,8 +460,8 @@ cd server/valhalla && docker compose up -d      # kézi indítás
 curl http://127.0.0.1:8002/status                # él-e
 ```
 
-Bejelentkezéskor a `~/Library/LaunchAgents/com.motortelemetria.valhalla.plist`
-hozza fel (naplója: `~/Library/Logs/motor-valhalla.log`). A backend a
+Tartós üzemben a konténert ugyanaz a szolgáltatáskezelő hozza fel
+induláskor, mint a backendet (`docker compose up -d`). A backend a
 `VALHALLA_URL` környezeti változóból veszi a címet, tehát a nyilvános példány
 bármikor tartalék marad. Ha a motor áll, a tervezés tiszta **503**-at ad, a
 többi funkció változatlanul működik.
@@ -549,15 +546,14 @@ cp server/.env.example server/.env                 # a backend beállításai
 | `server/.env` | `MOTOR_TOKEN` (kötelező), `WAZE_API_KEY`, `PORT`, `HOST`, `VALHALLA_URL`, `SELFTEST_LAT`/`LON` | a szerver `MOTOR_TOKEN` nélkül nem indul el |
 
 A `MOTOR_TOKEN` és a `motor.defaultToken` ugyanaz az érték legyen. Kiszolgálóra
-telepítve a `.env` helyett a systemd/launchd unit `Environment=` sorai is
+telepítve a `.env` helyett a szolgáltatás unitjának környezeti változói is
 adhatják ugyanezeket – a már beállított környezeti változó erősebb a fájlnál.
 
 ## Fordítás
 
-Az eszközlánc már telepítve van ezen a gépen, root jog nélkül:
-
-- JDK 17 (Temurin): `~/Android/jdk-17.0.20+8`
-- Android SDK (platform 35, build-tools 35.0.0): `~/Android/Sdk`
+Kell hozzá JDK 17 és az Android SDK (platform 35, build-tools 35.0.0). A
+`build.sh` a szokásos helyeken keresi őket, de a `JAVA_HOME` és az
+`ANDROID_HOME` környezeti változóval bárhova átirányítható:
 
 ```bash
 ./build.sh

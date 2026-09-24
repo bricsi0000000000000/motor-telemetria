@@ -5,7 +5,7 @@ import { fileURLToPath } from 'node:url'
  * Helyi beállítások betöltése a `server/.env` fájlból.
  *
  * A titkok (token, Waze-kulcs) nincsenek a repóban: vagy ez a fájl adja őket,
- * vagy a systemd/launchd unit `Environment=` sorai. A már meglévő környezeti
+ * vagy a szolgáltatás unitjának környezeti változói. A már meglévő környezeti
  * változókat a Node nem írja felül, tehát a unit erősebb a fájlnál.
  *
  * Minden modul, ami induláskor olvas környezeti változót, ezt importálja

@@ -24,7 +24,7 @@ app.use(cors())
 // Egy hosszú túra pontjai offline után egyben érkezhetnek, ezért bőven mérünk.
 app.use(express.json({ limit: '32mb' }))
 
-/** Token nélkül is elérhető: erről tudja az app és a systemd, hogy él a szerver. */
+/** Token nélkül is elérhető: erről tudja az app és a szolgáltatáskezelő, hogy él a szerver. */
 app.get('/api/health', (_req, res) => {
   res.json({ ok: true, service: 'motor-telemetria', time: Date.now() })
 })
