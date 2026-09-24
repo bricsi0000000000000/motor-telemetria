@@ -1,0 +1,36 @@
+# Helyi Valhalla útvonaltervező a Motor Telemetria számára.
+#
+# Miért saját példány a nyilvános FOSSGIS helyett:
+#  - a nyilvános build nem tartalmazza a sebességhatárokat (0/319 élen jött vissza
+#    speed_limit), így minden limitet külön Overpass-hívásból kellene pótolni;
+#  - a kanyargós útvonalstílus jelöltenként 5-6 hívást igényel, ez fair-use alatt
+#    nem fér bele;
+#  - a 39 túra visszamenőleges térképre illesztése sok ezer pont, hálózati
+#    korlát nélkül másodpercek, korláttal órák.
+#
+# Az első indítás letölti a magyar OSM kivonatot (~309 MB) és felépíti a
+# csempéket. Ez 20-40 perc, utána a konténer már csak kiszolgál.
+services:
+  valhalla:
+    image: ghcr.io/gis-ops/docker-valhalla/valhalla:latest
+    container_name: motor-valhalla
+    ports:
+      # 8787 a backend, 8788 a tartalék - a tervező a 8002-n figyel.
+      - "127.0.0.1:8002:8002"
+    volumes:
+      - ./custom_files:/custom_files
+    environment:
+      - tile_urls=https://download.geofabrik.de/europe/hungary-latest.osm.pbf
+      # Igaz: a meglévő csempéket használja, és nem építi újra minden indításkor.
+      - use_tiles_ignore_pbf=True
+      - force_rebuild=False
+      - force_rebuild_elevation=False
+      # A lejtő a motor gyorsulásába számít bele, ezért kell a domborzat.
+      - build_elevation=True
+      - build_admins=True
+      - build_time_zones=True
+      - build_transit=False
+      - build_tar=True
+      - serve_tiles=True
+      - server_threads=4
+    restart: unless-stopped

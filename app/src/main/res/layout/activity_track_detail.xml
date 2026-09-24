@@ -1,0 +1,182 @@
+<?xml version="1.0" encoding="utf-8"?>
+<androidx.coordinatorlayout.widget.CoordinatorLayout
+    xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:fitsSystemWindows="true">
+
+    <!-- A térkép a teljes képernyőt kitölti, a lap ráúszik. -->
+    <org.osmdroid.views.MapView
+        android:id="@+id/map"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent" />
+
+    <com.google.android.material.appbar.MaterialToolbar
+        android:id="@+id/toolbar"
+        android:layout_width="match_parent"
+        android:layout_height="?attr/actionBarSize"
+        android:background="?attr/colorSurface"
+        app:navigationIcon="@drawable/ic_back"
+        app:navigationIconTint="?attr/colorOnSurface"
+        app:title="@string/title_track_detail" />
+
+    <!--
+        Húzható lap: alaphelyzetben félig van felhúzva, lehúzva csak a táv és a
+        gombok látszanak, teljesen felhúzva pedig az elemzés is elfér.
+    -->
+    <androidx.core.widget.NestedScrollView
+        android:id="@+id/bottomSheet"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:background="@drawable/sheet_background"
+        android:clipToPadding="false"
+        android:elevation="8dp"
+        android:paddingBottom="16dp"
+        app:behavior_fitToContents="false"
+        app:behavior_halfExpandedRatio="0.45"
+        app:behavior_hideable="false"
+        app:behavior_peekHeight="132dp"
+        app:layout_behavior="com.google.android.material.bottomsheet.BottomSheetBehavior">
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical">
+
+            <com.google.android.material.bottomsheet.BottomSheetDragHandleView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content" />
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:paddingHorizontal="14dp">
+
+                <com.google.android.material.switchmaterial.SwitchMaterial
+                    android:id="@+id/smartTrack"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:checked="true"
+                    android:text="Okos útra illesztés" />
+                <TextView
+                    android:id="@+id/trackDisplayStatus"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="Motorozás útra illesztve; séta, megállás és bizonytalan részek eredeti GPS szerint."
+                    android:textAppearance="?attr/textAppearanceBodySmall" />
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:baselineAligned="false"
+                    android:orientation="horizontal">
+
+                    <LinearLayout style="@style/StatCell">
+                        <TextView style="@style/StatLabel" android:text="@string/label_distance" />
+                        <TextView android:id="@+id/tvDistance" style="@style/StatValue" />
+                    </LinearLayout>
+
+                    <LinearLayout style="@style/StatCell">
+                        <TextView style="@style/StatLabel" android:text="@string/label_duration" />
+                        <TextView android:id="@+id/tvDuration" style="@style/StatValue" />
+                    </LinearLayout>
+
+                    <LinearLayout style="@style/StatCell">
+                        <TextView style="@style/StatLabel" android:text="@string/label_moving_time" />
+                        <TextView android:id="@+id/tvMovingTime" style="@style/StatValue" />
+                    </LinearLayout>
+                </LinearLayout>
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="10dp"
+                    android:baselineAligned="false"
+                    android:orientation="horizontal">
+
+                    <LinearLayout style="@style/StatCell">
+                        <TextView style="@style/StatLabel" android:text="@string/label_avg_speed" />
+                        <TextView android:id="@+id/tvAvgSpeed" style="@style/StatValue" />
+                    </LinearLayout>
+
+                    <LinearLayout style="@style/StatCell">
+                        <TextView style="@style/StatLabel" android:text="@string/label_max_speed" />
+                        <TextView android:id="@+id/tvMaxSpeed" style="@style/StatValue" />
+                    </LinearLayout>
+
+                    <LinearLayout style="@style/StatCell">
+                        <TextView style="@style/StatLabel" android:text="@string/label_elevation_gain" />
+                        <TextView android:id="@+id/tvElevGain" style="@style/StatValue" />
+                    </LinearLayout>
+                </LinearLayout>
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="14dp"
+                    android:orientation="horizontal">
+
+                    <com.google.android.material.button.MaterialButton
+                        android:id="@+id/btnExport"
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:text="@string/action_export"
+                        app:icon="@drawable/ic_share"
+                        app:iconGravity="textStart" />
+
+                    <com.google.android.material.button.MaterialButton
+                        android:id="@+id/btnDelete"
+                        style="@style/Widget.Material3.Button.OutlinedButton"
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_marginStart="8dp"
+                        android:layout_weight="1"
+                        android:text="@string/action_delete"
+                        app:icon="@drawable/ic_delete"
+                        app:iconGravity="textStart" />
+                </LinearLayout>
+
+                <!-- Elemzés: szakaszok és a helyi sebességhatárhoz mért összevetés -->
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="18dp"
+                    android:gravity="center_vertical"
+                    android:orientation="horizontal">
+
+                    <TextView
+                        style="@style/StatsCardTitle"
+                        android:layout_width="0dp"
+                        android:layout_marginBottom="0dp"
+                        android:layout_weight="1"
+                        android:text="@string/analysis_title" />
+
+                    <com.google.android.material.button.MaterialButton
+                        android:id="@+id/btnAnalysisRefresh"
+                        style="@style/Widget.Material3.Button.TextButton"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="@string/action_refresh" />
+                </LinearLayout>
+
+                <TextView
+                    android:id="@+id/tvAnalysisState"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="2dp"
+                    android:alpha="0.75"
+                    android:textSize="13sp" />
+
+                <LinearLayout
+                    android:id="@+id/analysisContainer"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical" />
+            </LinearLayout>
+        </LinearLayout>
+    </androidx.core.widget.NestedScrollView>
+
+</androidx.coordinatorlayout.widget.CoordinatorLayout>

@@ -1,0 +1,33 @@
+*.iml
+.gradle/
+local.properties
+.idea/
+.DS_Store
+build/
+captures/
+.externalNativeBuild/
+.cxx/
+*.apk
+*.idsig
+*.keystore
+
+# Backend
+node_modules/
+server/data/
+
+# Útvonaltervező: a csempék az OSM kivonatból épülnek, nem verziózzuk (több GB)
+server/valhalla/custom_files/
+
+# Kotlin fordító naplói
+.kotlin/
+
+# Helyi titkok és gépfüggő beállítások (soha ne kerüljenek a repóba)
+secrets.properties
+keystore.properties
+.env
+.env.*
+!.env.example
+*.jks
+*.p12
+*.pem
+*.key

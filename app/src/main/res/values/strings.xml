@@ -1,0 +1,327 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Motor Telemetria</string>
+
+    <string name="title_tracks">Túrák</string>
+    <string name="title_track_detail">Túra</string>
+    <string name="title_stats">Statisztika</string>
+
+    <string name="tab_map">Térkép</string>
+    <string name="tab_tracks">Túrák</string>
+    <string name="tab_stats">Statisztika</string>
+
+    <string name="action_start">Indítás</string>
+    <string name="action_pause">Szünet</string>
+    <string name="action_resume">Folytatás</string>
+    <string name="action_stop">Leállítás</string>
+    <string name="action_cancel">Mégse</string>
+    <string name="action_delete">Törlés</string>
+    <string name="action_export">GPX megosztása</string>
+    <string name="action_settings">Beállítások</string>
+    <string name="action_tracks">Túrák listája</string>
+    <string name="action_follow">Követés be/ki</string>
+
+    <string name="status_idle">Készenlét</string>
+    <string name="status_recording">Rögzítés</string>
+    <string name="status_paused">Szüneteltetve</string>
+
+    <string name="unit_kmh">km/h</string>
+
+    <string name="label_distance">Táv</string>
+    <string name="label_duration">Idő</string>
+    <string name="label_moving_time">Mozgásban</string>
+    <string name="label_avg_speed">Átlag</string>
+    <string name="label_max_speed">Max</string>
+    <string name="label_altitude">Magasság</string>
+    <string name="label_elevation_gain">Emelkedő</string>
+
+    <string name="gps_waiting">GPS készenlétben</string>
+    <string name="gps_searching">Műholdak keresése…</string>
+    <string name="gps_ready">GPS ±%1$d m</string>
+    <string name="gps_accuracy">GPS ±%1$d m · %2$d pont</string>
+
+    <string name="widget_full_label">Motor Telemetria</string>
+    <string name="widget_full_desc">Sebesség, táv és idő a kezdőképernyőn, indító/szünet/leállító gombokkal.</string>
+    <string name="widget_stats_label">Motor – statisztika</string>
+    <string name="widget_stats_desc">Össztáv, túrák száma, aktuális havi táv és a csúcsok a kezdőképernyőn.</string>
+    <string name="widget_stats_title">Statisztika</string>
+    <string name="widget_stats_month">Ez a hónap</string>
+    <string name="widget_stats_summary">%1$d túra · %2$s</string>
+
+    <string name="widget_compact_label">Motor – gyorsvezérlő</string>
+    <string name="widget_compact_desc">Egy gombbal indítható és szüneteltethető mérés, kis helyen.</string>
+
+    <string name="gps_off_title">A helymeghatározás ki van kapcsolva</string>
+    <string name="gps_off_message">A méréshez be kell kapcsolni a GPS-t. Megnyitod a beállításokat?</string>
+
+    <string name="stop_confirm_title">Mérés leállítása</string>
+    <string name="stop_confirm_message">Biztosan lezárod és elmented a túrát?</string>
+
+    <string name="delete_confirm_title">Túra törlése</string>
+    <string name="delete_confirm_message">Biztosan törlöd a(z) %1$s túrát? Ez nem vonható vissza.</string>
+
+    <string name="tracks_empty">Még nincs mentett túra.\nIndíts egy mérést a főképernyőn!</string>
+    <string name="day_today">Ma</string>
+    <string name="day_yesterday">Tegnap</string>
+    <string name="day_summary">%1$d túra · %2$s mozgásban · átlag %3$s · max %4$s · %5$s emelkedő</string>
+    <string name="route_line">%1$s → %2$s</string>
+    <string name="route_unknown">ismeretlen hely</string>
+    <string name="route_pair_out">oda</string>
+    <string name="route_pair_back">vissza</string>
+    <string name="route_loop">körút</string>
+    <string name="route_badge">%1$s · %2$s</string>
+
+    <string name="track_summary">%1$s · átlag %2$s · max %3$s</string>
+
+    <string name="export_empty">Ehhez a túrához nincs mentett pont.</string>
+    <string name="error_no_location_permission">Helymeghatározási engedély nélkül nem tudok mérni.</string>
+
+    <string name="notif_channel_name">Mérés</string>
+    <string name="notif_channel_desc">A futó GPS rögzítés állapota</string>
+    <string name="notif_recording">Motortúra rögzítése</string>
+    <string name="notif_paused">Mérés szüneteltetve</string>
+    <string name="notif_content">%1$s · %2$s · %3$s km/h</string>
+
+    <!-- Statisztika -->
+    <string name="stats_totals">Összesítés</string>
+    <string name="stats_records">Rekordok</string>
+    <string name="stats_months">Havi bontás</string>
+    <string name="stats_server">Szerver</string>
+    <string name="stats_empty">Még nincs mentett túra, így nincs mit összesíteni.</string>
+
+    <string name="label_track_count">Túrák</string>
+    <string name="label_max_elevation">Max emelkedő</string>
+    <string name="label_total_distance">Össztáv</string>
+    <string name="label_total_time">Összidő</string>
+    <string name="label_avg_distance">Átlagos táv</string>
+    <string name="label_first_ride">Első túra</string>
+    <string name="label_longest_ride">Leghosszabb túra</string>
+    <string name="label_fastest_ride">Legnagyobb sebesség</string>
+
+    <string name="record_line">%1$s · %2$s</string>
+    <string name="month_detail">%1$d túra · %2$s</string>
+    <string name="no_data">—</string>
+
+    <plurals name="track_count">
+        <item quantity="one">%d mentett túra</item>
+        <item quantity="other">%d mentett túra</item>
+    </plurals>
+
+    <!-- Beállítások -->
+    <string name="title_settings">Beállítások</string>
+    <string name="settings_auto">Helyek és automatikus indítás</string>
+    <string name="auto_switch">Automatikus indítás és leállítás</string>
+    <string name="auto_hint">Ha elhagyod valamelyik megadott helyet (otthon, munkahely, célpont), magától elindul a mérés; megérkezve és megállva lezárja. A figyelést a rendszer végzi, ezért nincs hozzá állandó értesítés és nem fogyaszt.</string>
+
+    <string name="place_type_home">Otthon</string>
+    <string name="place_type_work">Munkahely</string>
+    <string name="place_type_destination">Célpont</string>
+    <string name="place_add">Új hely felvétele</string>
+    <string name="place_list_empty">Még nincs megadott hely. Vegyél fel legalább egyet – például az otthonodat.</string>
+    <string name="place_row_detail">%1$s · %2$d m sugár · %3$s, %4$s</string>
+    <string name="place_edit_title">Hely</string>
+    <string name="place_name">Név</string>
+    <string name="place_coords">Középpont: %1$s, %2$s</string>
+    <string name="place_use_current">Ugrás a jelenlegi helyzetre</string>
+    <string name="place_delete_title">Hely törlése</string>
+    <string name="place_delete_message">Biztosan törlöd ezt: %1$s?</string>
+    <string name="place_edit_hint">Told a térképet úgy, hogy a célkereszt a hely közepén legyen.</string>
+
+    <string name="auto_radius">Kör sugara (méter)</string>
+    <string name="auto_radius_invalid">A sugár %1$d és %2$d méter között lehet.</string>
+    <string name="auto_no_fix">Nincs friss helyzet – told kézzel a térképet a kívánt pontra.</string>
+    <string name="auto_state_on">Készenlét fut – figyeli, mikor indulsz el.</string>
+    <string name="auto_state_off">Kikapcsolva</string>
+    <string name="auto_state_no_places">Vegyél fel legalább egy helyet, hogy legyen mit figyelni.</string>
+    <string name="auto_state_needs_background">Működik, de újraindítás után csak az app megnyitása után indul újra – ehhez kell a „Mindig engedélyezve” helyzet-jog.</string>
+    <string name="auto_background_title">Helyzet a háttérben</string>
+    <string name="auto_background_message">Ahhoz, hogy a telefon újraindítása után is magától figyeljen, a helyzet-engedélyt „Mindig engedélyezve” értékre kell állítani a rendszerbeállításokban. Enélkül is működik, csak minden újraindítás után egyszer meg kell nyitni az appot.</string>
+
+    <string name="bt_switch">Csak a motor Bluetooth-ával</string>
+    <string name="bt_hint">Így a gyalogos és autós utak nem indítanak mérést: a rendszer csak akkor kezd rögzíteni, ha a telefon a motor eszközéhez csatlakozik.</string>
+    <string name="bt_device_none">Nincs kiválasztott eszköz</string>
+    <string name="bt_device_selected">Eszköz: %1$s</string>
+    <string name="bt_choose">Bluetooth-eszköz választása</string>
+    <string name="bt_no_paired">Nincs párosított Bluetooth-eszköz. Előbb párosítsd a motort a telefon beállításaiban.</string>
+    <string name="bt_permission_needed">A Bluetooth-eszközök listájához engedély kell.</string>
+
+    <string name="bt_status_connected">%1$s · csatlakozva</string>
+    <string name="bt_status_disconnected">%1$s · nem látható</string>
+    <string name="bt_diagnostics_title">Motor Bluetooth állapota</string>
+    <string name="bt_status_no_permission">Motor Bluetooth: hiányzó engedély</string>
+    <string name="bt_status_off">Motor Bluetooth: a Bluetooth ki van kapcsolva</string>
+
+    <string name="auto_manual_title">Elindultál</string>
+    <string name="auto_manual_text">Kiléptél innen: %1$s – koppints a mérés indításához.</string>
+
+    <string name="auto_channel_name">Automatikus indítás</string>
+    <string name="auto_channel_desc">Értesítés, ha az automatikus indítás nem tudott magától elindulni</string>
+
+    <!-- Szolgáltatások tesztje -->
+    <string name="selftest_title">Szolgáltatások</string>
+    <string name="selftest_hint">Egyesével ellenőrzi, elérhető-e minden, amire az app támaszkodik. A Waze külön gombbal fut, mert minden hívása fogyasztja a havi keretet.</string>
+    <string name="selftest_run">Teszt futtatása</string>
+    <string name="selftest_run_waze">Waze élő teszt (1 hívást felhasznál)</string>
+    <string name="selftest_running">Ellenőrzés folyamatban…</string>
+    <string name="selftest_step">Ellenőrzés %1$d / %2$d · %3$s…</string>
+    <string name="selftest_all_ok">✓ Minden rendben (%1$d szolgáltatás)</string>
+    <string name="selftest_failed">✗ %1$d szolgáltatás nem elérhető: %2$s</string>
+    <string name="selftest_line">%1$s %2$s%3$s\n    %4$s</string>
+    <string name="selftest_ms">· %1$d ms</string>
+    <string name="selftest_waze_confirm">Ez egy valódi Waze-hívást indít, ami fogyaszt a havi keretből. Folytatod?</string>
+
+    <!-- Megjelenés -->
+    <string name="stats_appearance">Megjelenés</string>
+    <string name="theme_system">Rendszer</string>
+    <string name="theme_light">Világos</string>
+    <string name="theme_dark">Sötét</string>
+    <string name="theme_hint">Sötét módban a térkép csempéi is sötétre váltanak. A kezdőképernyős widget a telefon beállítását követi.</string>
+
+    <!-- Szinkron -->
+    <string name="sync_up_to_date">Minden adat fent van a szerveren</string>
+    <string name="sync_running">Feltöltés folyamatban…</string>
+    <string name="sync_last">Utolsó szinkron: %1$s</string>
+    <string name="sync_never">Még nem volt sikeres szinkron</string>
+    <string name="sync_error">Legutóbbi hiba: %1$s</string>
+    <string name="sync_started">Szinkron elindítva</string>
+    <string name="sync_pending_short">feltöltésre vár</string>
+    <string name="sync_done_short">szinkronizálva</string>
+
+    <plurals name="sync_pending">
+        <item quantity="one">%d túra vár feltöltésre</item>
+        <item quantity="other">%d túra vár feltöltésre</item>
+    </plurals>
+
+    <string name="action_sync_now">Szinkron most</string>
+    <string name="action_test_server">Kapcsolat teszt</string>
+    <string name="action_save_server">Mentés</string>
+    <string name="label_server_url">Szerver címe (Tailscale)</string>
+    <string name="label_token">Token</string>
+    <string name="device_uid">Eszközazonosító: %1$s</string>
+    <string name="server_saved">Szerverbeállítások mentve</string>
+    <string name="server_url_invalid">A címnek http:// vagy https:// előtaggal kell kezdődnie.</string>
+    <string name="server_unreachable">Nem érhető el: %1$s</string>
+
+    <!-- Útmenti adatok -->
+    <string name="road_data_title">Útmenti adatok</string>
+    <string name="road_layer_cameras">Fix sebességmérők</string>
+    <string name="road_layer_signals">Lámpás kereszteződések</string>
+    <string name="road_layer_speedlimits">Sebességhatárok</string>
+    <string name="road_layer_waze">Rendőrök, balesetek</string>
+    <string name="road_layer_line">%1$s: %2$s · %3$s</string>
+    <string name="road_layer_count">%1$d db</string>
+    <string name="road_layer_segments">%1$d szakasz</string>
+    <string name="road_layer_refreshing">frissítés folyamatban…</string>
+    <string name="road_layer_error">hiba: %1$s</string>
+    <string name="road_layer_waze_off">nincs beállítva</string>
+    <string name="road_layer_quota">Waze keret: %1$d / %2$d hívás maradt ebben a hónapban</string>
+    <string name="road_legend_title">Sebességhatárok színei</string>
+    <string name="road_legend">≤30 türkiz · 40–50 zöld · 60–70 sárga · 80–90 narancs · 100+ piros\nFolytonos vonal = kiírt tábla, szaggatott = úttípus szerinti becslés</string>
+    <string name="road_area">Terület: Győr (%1$s)</string>
+    <string name="road_refresh">Frissítés</string>
+    <string name="road_refresh_free">Csak ingyenes rétegek</string>
+    <string name="road_refresh_started">Frissítés elindítva – a rétegek a háttérben töltődnek.</string>
+    <string name="road_offline">Nem érhető el a szerver, a legutóbb letöltött adat látszik.</string>
+    <string name="limits_toggle">Sebességhatárok mutatása</string>
+    <string name="limits_on">Sebességhatárok bekapcsolva</string>
+    <string name="limits_off">Sebességhatárok kikapcsolva</string>
+    <string name="limits_loading">Sebességhatárok letöltése…</string>
+    <string name="limits_empty">Még nincs letöltve a sebességhatár-réteg – a szerver most tölti.</string>
+    <string name="limits_zoom_in">Közelíts rá a térképre a sebességhatárokhoz.</string>
+    <string name="road_point_camera">Fix sebességmérő</string>
+    <string name="road_point_police">Rendőri kitelepülés</string>
+    <string name="road_point_accident">Baleset</string>
+    <string name="road_point_signals">Lámpás kereszteződés</string>
+    <string name="road_point_other">Egyéb bejelentés</string>
+    <string name="road_point_limit">%1$s · %2$d km/h</string>
+    <string name="segment_info">%1$d km/h (%2$s)%3$s</string>
+    <string name="segment_tagged">kiírt</string>
+    <string name="segment_guessed">becsült</string>
+
+    <!-- Túraelemzés -->
+    <string name="analysis_title">Elemzés</string>
+    <string name="action_refresh">Újraszámolás</string>
+    <string name="analysis_loading">Elemzés betöltése…</string>
+    <string name="analysis_recalculating">Újraszámolás a szerveren…</string>
+    <string name="analysis_updated">Frissítve: %1$s</string>
+    <string name="analysis_error">Nem sikerült lekérni: %1$s</string>
+    <string name="analysis_not_synced">Ez a túra még nem került fel a szerverre, ezért nincs elemzés.</string>
+    <string name="analysis_too_short">Túl kevés pont az elemzéshez.</string>
+    <string name="analysis_no_sections">Nem volt kiemelhető szakasz ezen a túrán.</string>
+
+    <string name="analysis_elevation">Emelkedés %1$s ↑ · süllyedés %2$s ↓ · legmeredekebb %3$s</string>
+    <string name="analysis_limit_above">Sebességhatár felett: a táv %1$s-a (%2$s, %3$s)</string>
+    <string name="analysis_limit_max">Legnagyobb túllépés: +%1$d km/h (%2$d-es szakaszon %3$d km/h)</string>
+    <string name="analysis_limit_ratio">Átlagos tempó a kiírt limithez képest: %1$s</string>
+    <string name="analysis_limit_coverage">Az útpontok %1$s-ához találtunk sebességhatárt (OSM)</string>
+    <string name="analysis_limit_clean">Végig a sebességhatáron belül maradtál.</string>
+    <string name="analysis_limit_unknown">Ehhez az útvonalhoz nem találtunk sebességhatárt az OSM-ben.</string>
+    <string name="analysis_limit_failed">Sebességhatárok nem elérhetők: %1$s</string>
+
+    <string name="analysis_group_speeding">Sebességhatár felett</string>
+    <string name="analysis_group_fast">Gyors szakaszok</string>
+    <string name="analysis_group_climbs">Emelkedők</string>
+    <string name="analysis_group_descents">Lejtők</string>
+    <string name="analysis_group_slow">Lassú szakaszok</string>
+
+    <string name="section_speeding">Limit feletti szakasz</string>
+    <string name="section_fast">Gyors szakasz</string>
+    <string name="section_climb">Emelkedő</string>
+    <string name="section_descent">Lejtő</string>
+    <string name="section_slow">Lassú szakasz</string>
+
+    <string name="section_detail_limit">csúcs %1$s · limit %2$d km/h · %3$s</string>
+    <string name="section_detail_speed">%1$s · %2$s · limit %3$s</string>
+    <string name="section_detail_grade">%1$s meredekség · %2$s · %3$s</string>
+    <string name="section_detail_slow">%1$s alatt %2$s</string>
+
+    <!-- Statisztika: túrák elemzése -->
+    <string name="stats_analysis">Túrák elemzése</string>
+    <string name="stats_analysis_hint">A jobb oldali szám: a táv hány százalékát tetted meg a helyi sebességhatár felett (5%% fölött pirossal).</string>
+    <string name="action_fetch_analyses">Hiányzó elemzések letöltése</string>
+    <string name="analysis_row_detail">%1$s · max emelkedő %2$s · %3$d gyors szakasz</string>
+    <string name="analysis_row_missing">nincs még elemzés</string>
+    <string name="analysis_fetching">Elemzések letöltése: %1$d / %2$d</string>
+    <string name="analysis_fetch_done">Kész: %1$d új elemzés</string>
+
+    <!-- Útvonaltervezés -->
+    <string name="tab_route">Tervező</string>
+    <string name="route_title">Útvonaltervezés</string>
+    <string name="route_hint">Hosszan nyomd a térképet egy pont felvételéhez. A pontokat húzással átrendezheted.</string>
+    <string name="route_add_center">Pont felvétele a képernyő közepéről</string>
+    <string name="route_reorder">Átrendezés</string>
+    <string name="route_remove_point">Pont törlése</string>
+    <string name="route_style_fast">Gyors</string>
+    <string name="route_style_curvy">Kanyargós</string>
+    <string name="route_plan_action">Útvonal tervezése</string>
+    <string name="route_planning">Tervezés…</string>
+    <string name="route_need_two">Legalább két pont kell.</string>
+    <string name="route_corners">Kanyarok</string>
+    <string name="route_sections">Szakaszok</string>
+    <string name="route_fastest">Leggyorsabb</string>
+    <string name="route_average">Átlagos</string>
+    <string name="route_slowest">Leglassabb</string>
+    <string name="route_save">Útvonal mentése</string>
+    <string name="route_saved">Mentett útvonalak</string>
+    <string name="route_clear">Pontok törlése</string>
+    <string name="route_save_title">Útvonal mentése</string>
+    <string name="route_save_hint">Az útvonal neve</string>
+    <string name="route_saved_ok">Elmentve: %1$s</string>
+    <string name="route_no_saved">Még nincs mentett útvonalad.</string>
+    <string name="route_open_gmaps">Megnyitás Google Maps-ben</string>
+    <string name="route_gmaps_simplified">A Google Maps legfeljebb %1$d köztes pontot fogad, ezért néhány felvett pont kimaradt.</string>
+    <string name="route_gmaps_missing">Nincs a telefonon Google Maps vagy böngésző, ami megnyithatná.</string>
+    <string name="route_autosaved">Legutóbb tervezett</string>
+    <string name="route_summary">%1$.1f km · %2$s</string>
+    <string name="route_moving_stops">mozgás %1$s · állás %2$s</string>
+    <string name="route_source_cell">ezen az úton mért tempód (%1$d minta)</string>
+    <string name="route_source_bucket">hasonló úton mért tempód (%1$d minta)</string>
+    <string name="route_source_curve">kanyarból becsülve</string>
+    <string name="route_source_default">alapértelmezett becslés</string>
+    <string name="corner_hairpin_name">Hajtű</string>
+    <string name="corner_tight_name">Szűk</string>
+    <string name="corner_medium_name">Közepes</string>
+    <string name="corner_gentle_name">Enyhe</string>
+    <string name="corner_straight_name">Egyenes</string>
+    <string name="route_corner_row">%1$s · %2$d db · %3$s</string>
+</resources>

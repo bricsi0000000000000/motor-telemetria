@@ -1,0 +1,43 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Sötét mód: ugyanazok a névre szóló színek, éjszakai értékekkel. -->
+    <color name="brand">#5B9CFF</color>
+    <color name="brand_dark">#3B82F6</color>
+    <color name="on_brand">#FF08111F</color>
+
+    <color name="surface">#FF1B1E24</color>
+    <color name="background">#FF121418</color>
+    <color name="on_surface">#FFE8EAEE</color>
+
+    <color name="track">#FF5B9CFF</color>
+    <color name="position">#FF2DD4BF</color>
+    <color name="accuracy_fill">#332DD4BF</color>
+    <color name="accuracy_stroke">#772DD4BF</color>
+    <color name="speeding">#FFF87171</color>
+    <color name="climb">#FFA78BFA</color>
+
+    <color name="place_home">#FF4ADE80</color>
+    <color name="place_work">#FF818CF8</color>
+    <color name="place_destination">#FFF472B6</color>
+    <color name="road_camera">#FFF87171</color>
+    <color name="road_police">#FF60A5FA</color>
+    <color name="road_accident">#FFFBBF24</color>
+    <color name="road_signals">#FF94A3B8</color>
+
+    <color name="limit_30">#FF2DD4BF</color>
+    <color name="limit_50">#FF4ADE80</color>
+    <color name="limit_70">#FFFACC15</color>
+    <color name="limit_90">#FFFB923C</color>
+    <color name="limit_110">#FFF87171</color>
+
+    <color name="place_circle_fill">#265B9CFF</color>
+    <color name="place_circle_stroke">#665B9CFF</color>
+
+    <color name="warning">#FFF87171</color>
+    <color name="bar_track">#FF2E323A</color>
+
+    <color name="widget_bg">#F21C1F26</color>
+    <color name="widget_text">#FFECEDEF</color>
+    <color name="widget_text_dim">#FF9CA3AF</color>
+    <color name="widget_button_bg">#FF2C3038</color>
+</resources>

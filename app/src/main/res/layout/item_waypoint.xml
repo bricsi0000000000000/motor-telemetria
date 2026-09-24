@@ -1,0 +1,41 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:gravity="center_vertical"
+    android:orientation="horizontal"
+    android:paddingHorizontal="8dp"
+    android:paddingVertical="6dp">
+
+    <ImageView
+        android:id="@+id/ivDrag"
+        android:layout_width="32dp"
+        android:layout_height="32dp"
+        android:contentDescription="@string/route_reorder"
+        android:padding="4dp"
+        android:src="@drawable/ic_drag_handle" />
+
+    <TextView
+        android:id="@+id/tvIndex"
+        android:layout_width="28dp"
+        android:layout_height="wrap_content"
+        android:gravity="center"
+        android:textAppearance="?attr/textAppearanceTitleSmall" />
+
+    <TextView
+        android:id="@+id/tvName"
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:layout_weight="1"
+        android:paddingStart="8dp"
+        android:paddingEnd="8dp"
+        android:textAppearance="?attr/textAppearanceBodyMedium" />
+
+    <ImageButton
+        android:id="@+id/btnRemove"
+        android:layout_width="40dp"
+        android:layout_height="40dp"
+        android:background="?attr/selectableItemBackgroundBorderless"
+        android:contentDescription="@string/route_remove_point"
+        android:src="@android:drawable/ic_menu_close_clear_cancel" />
+</LinearLayout>

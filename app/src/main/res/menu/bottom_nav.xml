@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="utf-8"?>
+<menu xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <item
+        android:id="@+id/tab_map"
+        android:icon="@drawable/ic_map"
+        android:title="@string/tab_map" />
+
+    <item
+        android:id="@+id/tab_tracks"
+        android:icon="@drawable/ic_list"
+        android:title="@string/tab_tracks" />
+
+    <item
+        android:id="@+id/tab_route"
+        android:icon="@drawable/ic_route_plan"
+        android:title="@string/tab_route" />
+
+    <item
+        android:id="@+id/tab_stats"
+        android:icon="@drawable/ic_chart"
+        android:title="@string/tab_stats" />
+
+</menu>
