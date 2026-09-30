@@ -28,8 +28,8 @@ android {
         applicationId = "hu.motor.telemetria"
         minSdk = 24
         targetSdk = 35
-        versionCode = 15
-        versionName = "1.14"
+        versionCode = 19
+        versionName = "1.18"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
         buildConfigField("String", "DEFAULT_BASE_URL", "\"${secret("motor.defaultBaseUrl")}\"")

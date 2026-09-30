@@ -19,7 +19,9 @@ object ObservedStopRepository {
                      * Egy terület-látogatásnál a be- és kilépésekből összeadott idő. Ez nem a
                      * vége mínusz eleje: közben kiléphettél, akár egy belső területre is.
                      */
-                    val durationMs: Long? = null) {
+                    val durationMs: Long? = null,
+                    /** Lámpánál vagy lámpa miatti sorban: ennyi méterre volt a lámpa a nyomvonal mentén. */
+                    val signalDistanceM: Int? = null) {
         /** A kiírandó időtartam. */
         val shownMillis: Long get() = (durationMs ?: (endedAt - startedAt)).coerceAtLeast(0)
     }
@@ -144,7 +146,8 @@ object ObservedStopRepository {
                     s.optString("type", "OTHER"), if (s.isNull("name")) null else s.optString("name"),
                     if (s.isNull("brand")) null else s.optString("brand"), s.optString("reason"),
                     if (s.isNull("areaId") || !s.has("areaId")) null else s.optLong("areaId"),
-                    if (s.isNull("durationMs") || !s.has("durationMs")) null else s.optLong("durationMs"))
+                    if (s.isNull("durationMs") || !s.has("durationMs")) null else s.optLong("durationMs"),
+                    if (s.isNull("signalDistanceM") || !s.has("signalDistanceM")) null else s.optInt("signalDistanceM"))
             }
         }.getOrDefault(local)
     }
