@@ -10,6 +10,8 @@
 
     <!-- Térkép -->
     <color name="track">#FF2563EB</color>
+    <!-- Séta egy gyalog bejárt területen belül (szaggatott) -->
+    <color name="walk">#FF64748B</color>
     <color name="speed_0">#FF000000</color>
     <color name="speed_10">#FF16A34A</color>
     <color name="speed_30">#FFFACC15</color>

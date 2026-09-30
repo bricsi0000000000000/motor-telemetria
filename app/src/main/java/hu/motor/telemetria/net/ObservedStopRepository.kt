@@ -28,7 +28,11 @@ object ObservedStopRepository {
      * Ezekben a területekben gyalog is jársz: a bent töltött idő számít,
      * sebességtől függetlenül. Ugyanaz, mint a szerveren.
      */
-    private val VISIT_KINDS = setOf("SHOP", "PLACE", "FUEL", "PARKING")
+    val VISIT_KINDS = setOf("SHOP", "PLACE", "FUEL", "PARKING")
+
+    /** A pontot tartalmazó (legbelső) gyalog bejárt terület: ott séta van, nem motorozás. */
+    fun visitAreaAt(lat: Double, lon: Double, areas: List<MapArea> = AreaRepository.current()): MapArea? =
+        areas.filter { it.kind in VISIT_KINDS && it.contains(lat, lon) }.minByOrNull { it.size }
 
     /** Ennél rövidebb összesített bent-tartózkodás elhaladás vagy GPS-tévedés. */
     private const val MIN_VISIT_MS = 30_000L
@@ -41,8 +45,6 @@ object ObservedStopRepository {
         var still = 0
         var first: Long? = null
         var last = 0L
-        val lats = mutableListOf<Double>()
-        val lons = mutableListOf<Double>()
     }
 
     /**
@@ -75,8 +77,6 @@ object ObservedStopRepository {
             }
             if (here != null) {
                 val total = totals.getOrPut(here.id) { Total(here) }
-                total.lats += p.lat
-                total.lons += p.lon
                 if (p.speedMps <= 0.8f) total.still++
                 if (total.first == null) total.first = p.time
             }
@@ -86,7 +86,8 @@ object ObservedStopRepository {
         // Áthajtás nem látogatás: legalább fél perc, és legalább egyszer álltál is.
         return totals.values.filter { it.ms >= MIN_VISIT_MS && it.still >= 2 }.map { total ->
             val first = total.first ?: total.last
-            Stop(first.toString(), total.lats.sorted()[total.lats.size / 2], total.lons.sorted()[total.lons.size / 2],
+            // Egy látogatás egyetlen pont: a terület pontja (ahol a logója is áll).
+            Stop(first.toString(), total.area.centerLat, total.area.centerLon,
                 first, total.last, type = total.area.kind, name = total.area.name,
                 reason = "A területen töltött idő összesen, a be- és kilépések alapján.",
                 areaId = total.area.id, durationMs = total.ms)

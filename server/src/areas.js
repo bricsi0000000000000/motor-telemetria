@@ -316,23 +316,28 @@ export function findVisits(points, areas) {
 
   return [...totals.values()]
     .filter((total) => total.ms >= MIN_VISIT_MS && total.still >= 2)
-    .map(({ area, ms, inside, first, last }) => ({
-      id: String(first),
-      lat: medianOf(inside.map((p) => p.lat)),
-      lon: medianOf(inside.map((p) => p.lon)),
-      accuracy: medianOf(inside.map((p) => p.accuracy)),
-      startedAt: first,
-      endedAt: last,
-      // Az összeadott bent töltött idő – nem a kettő különbsége, mert közben
-      // kiléphettél (akár egy belső területre is).
-      durationMs: ms,
-      type: area.kind,
-      name: area.name,
-      brand: null,
-      areaId: area.id,
-      logoAt: area.logoAt ?? null,
-      reason: 'A területen töltött idő összesen, a be- és kilépések alapján.'
-    }))
+    .map(({ area, ms, inside, first, last }) => {
+      // Egy látogatás egyetlen pont: a terület pontja (ahol a logója is áll),
+      // nem a bent bolyongó GPS-pontok közepe.
+      const [lat, lon] = centroid(area.polygon)
+      return {
+        id: String(first),
+        lat,
+        lon,
+        accuracy: medianOf(inside.map((p) => p.accuracy)),
+        startedAt: first,
+        endedAt: last,
+        // Az összeadott bent töltött idő – nem a kettő különbsége, mert közben
+        // kiléphettél (akár egy belső területre is).
+        durationMs: ms,
+        type: area.kind,
+        name: area.name,
+        brand: null,
+        areaId: area.id,
+        logoAt: area.logoAt ?? null,
+        reason: 'A területen töltött idő összesen, a be- és kilépések alapján.'
+      }
+    })
     .sort((a, b) => a.startedAt - b.startedAt)
 }
 

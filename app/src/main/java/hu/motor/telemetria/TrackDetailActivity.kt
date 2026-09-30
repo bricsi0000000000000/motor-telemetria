@@ -4,6 +4,7 @@ import android.content.Intent
 import android.content.res.ColorStateList
 import android.graphics.Bitmap
 import android.graphics.Canvas
+import android.graphics.DashPathEffect
 import android.graphics.Paint
 import android.graphics.Path
 import android.graphics.RectF
@@ -89,7 +90,9 @@ class TrackDetailActivity : AppCompatActivity() {
         @ColorInt val color: Int,
         val path: List<GeoPoint>,
         val minKmh: Int,
-        val maxKmh: Int
+        val maxKmh: Int,
+        /** Gyalog bejárt területen belül: séta, a sebesség nem számít. */
+        val walking: Boolean = false
     )
 
     private data class SpeedCardKey(@ColorInt val color: Int, val minKmh: Int, val maxKmh: Int)
@@ -108,9 +111,12 @@ class TrackDetailActivity : AppCompatActivity() {
                 setPoints(section.path)
                 outlinePaint.color = section.color
                 outlinePaint.strokeWidth = 12f
+                if (section.walking) outlinePaint.pathEffect = DashPathEffect(floatArrayOf(24f, 16f), 0f)
             }
             trackOverlays.add(line)
             binding.map.overlays.add(0, line)
+            // A sétának nincs sebességkártyája: a terület egy pontként, a megállásjelölővel látszik.
+            if (section.walking) continue
 
             val marker = Marker(binding.map).apply {
                 position = section.path[section.path.size / 2]
@@ -131,10 +137,17 @@ class TrackDetailActivity : AppCompatActivity() {
         binding.map.invalidate()
     }
 
-    /** Az útra illesztett kapcsolat az eredeti pontpár sebességét tartja meg. */
+    /**
+     * Az útra illesztett kapcsolat az eredeti pontpár sebességét tartja meg.
+     * Gyalog bejárt területen (bolt, benzinkút…) belül séta van: az egy
+     * szaggatott, sebességtől független szakasz.
+     */
     private fun speedSections(): List<SpeedSection> {
         val result = mutableListOf<SpeedSection>()
+        val visitAreas = AreaRepository.current().filter { it.kind in ObservedStopRepository.VISIT_KINDS }
+        @ColorInt val walkColor = ContextCompat.getColor(this, R.color.walk)
         var activeColor: Int? = null
+        var activeWalking = false
         var active = mutableListOf<GeoPoint>()
         var activeMinKmh = Int.MAX_VALUE
         var activeMaxKmh = Int.MIN_VALUE
@@ -146,11 +159,13 @@ class TrackDetailActivity : AppCompatActivity() {
                         color = color,
                         path = active.toList(),
                         minKmh = activeMinKmh,
-                        maxKmh = activeMaxKmh
+                        maxKmh = activeMaxKmh,
+                        walking = activeWalking
                     )
                 }
             }
             activeColor = null
+            activeWalking = false
             active = mutableListOf()
             activeMinKmh = Int.MAX_VALUE
             activeMaxKmh = Int.MIN_VALUE
@@ -161,12 +176,15 @@ class TrackDetailActivity : AppCompatActivity() {
                 flush()
                 return@forEachIndexed
             }
-            val speedKmh = (points[index + 1].speedMps * 3.6f).coerceAtLeast(0f).roundToInt()
-            val color = speedColor(points[index + 1].speedMps)
-            if (activeColor != color) flush()
+            val point = points[index + 1]
+            val walking = ObservedStopRepository.visitAreaAt(point.lat, point.lon, visitAreas) != null
+            val speedKmh = (point.speedMps * 3.6f).coerceAtLeast(0f).roundToInt()
+            val color = if (walking) walkColor else speedColor(point.speedMps)
+            if (activeColor != color || activeWalking != walking) flush()
             if (active.isEmpty()) active.addAll(link)
             else active.addAll(link.drop(if (active.last() == link.first()) 1 else 0))
             activeColor = color
+            activeWalking = walking
             activeMinKmh = minOf(activeMinKmh, speedKmh)
             activeMaxKmh = maxOf(activeMaxKmh, speedKmh)
         }
@@ -329,7 +347,16 @@ class TrackDetailActivity : AppCompatActivity() {
                 )
                 append(" $label")
             }
-            append(" km/h")
+            append(" km/h  ")
+            val start = length
+            append("╌")
+            setSpan(
+                ForegroundColorSpan(ContextCompat.getColor(this@TrackDetailActivity, R.color.walk)),
+                start,
+                length,
+                Spanned.SPAN_EXCLUSIVE_EXCLUSIVE
+            )
+            append(" séta")
         }
     }
 
@@ -373,6 +400,8 @@ class TrackDetailActivity : AppCompatActivity() {
             stopMarkers?.show(ObservedStopRepository.detect(pathPoints))
             lifecycleScope.launch {
                 AreaRepository.refresh(applicationContext)
+                // A frissült területekkel a séta-szakaszok is változhatnak.
+                redrawTrack()
                 stopMarkers?.show(ObservedStopRepository.load(pathPoints))
             }
             binding.trackDisplayStatus.text = "Útra illesztés ellenőrzése… Az eredeti GPS-vonal már látható."

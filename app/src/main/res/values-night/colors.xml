@@ -10,6 +10,8 @@
     <color name="on_surface">#FFE8EAEE</color>
 
     <color name="track">#FF5B9CFF</color>
+    <!-- Séta egy gyalog bejárt területen belül (szaggatott) -->
+    <color name="walk">#FF94A3B8</color>
     <color name="speed_0">#FF000000</color>
     <color name="speed_10">#FF16A34A</color>
     <color name="speed_30">#FFFACC15</color>
