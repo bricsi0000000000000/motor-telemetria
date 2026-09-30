@@ -128,6 +128,7 @@ export function classifyObservedStop(stop, elements, signals = []) {
     // Úton állva csak két eset van: vagy a lámpa tart, vagy az előtted lévők.
     const atSignal = signalDistance <= Math.max(30, stop.accuracy)
     return { ...stop, type: atSignal ? 'SIGNAL' : 'ROAD',
+      signalDistanceM: atSignal ? Math.round(signalDistance) : null,
       reason: atSignal ? 'Úton, ismert jelzőlámpa közelében történt várakozás (becslés).'
         : 'A megállás helye a közútra illeszkedik, lámpa nincs a közelben – forgalomban állás (becslés).' }
   }
@@ -173,6 +174,57 @@ export function classifyObservedStop(stop, elements, signals = []) {
         : 'Út melletti, tartós megállás és közeli térképi hely alapján becsült cél. Koppintással javítható.' }
   }
   return { ...stop, type: Number.isFinite(roadDistance) && roadDistance > 15 ? 'PARKING' : 'OTHER' }
+}
+
+/**
+ * Eddig a lámpától (a nyomvonal mentén mérve) a sor elején álltál. A lámpa
+ * pontja a kereszteződés közepén van, a stopvonal 20–30 méterrel előtte, és
+ * még egy-két jármű fér elé. A 2026. 09. 30-i úton a lámpánál állások 29–42
+ * méterre voltak, a mögötte sorban állások 73–84 méterre.
+ */
+export const SIGNAL_FRONT_M = 45
+
+/** Eddig a nyomvonal menti távolságig számít egy lámpa a sor elejének. */
+export const QUEUE_M = 350
+
+/** A sor legfeljebb ennyi idő alatt ér el a lámpáig (több zöldön át is). */
+const QUEUE_MS = 5 * 60000
+
+/** Ennyire kell a nyomvonalnak a lámpa mellett elhaladnia. */
+const SIGNAL_PASS_M = 25
+
+/**
+ * Forgalomban állásnál: a lámpa tartotta-e fel a sort előtted. Az álló pont
+ * utáni nyomvonalat követjük legfeljebb QUEUE_M méterig; ha közben elhaladsz
+ * egy jelzőlámpa mellett, a sor miatta állt, csak még nem értél oda.
+ *
+ * @returns a lámpa távolsága a megállástól a nyomvonal mentén, vagy null
+ */
+export function signalAhead(stop, points, lights) {
+  if (!Number.isInteger(stop.to) || !lights.length) return null
+  const near = lights.filter(p => Math.abs(p.lat - stop.lat) < 0.005 && Math.abs(p.lon - stop.lon) < 0.007)
+  if (!near.length) return null
+  const from = points[stop.to]
+  let walked = 0
+  // Az első lámpa, ami mellett elhaladsz; annál a legközelebbi pontig mérünk,
+  // mert az a lámpa helye. Egy kereszteződés túloldali lámpája már nem számít.
+  let best = null
+  for (let i = stop.to + 1; i < points.length; i++) {
+    const prev = points[i - 1], p = points[i]
+    if (p.segment !== from.segment || p.time - from.time > QUEUE_MS) break
+    walked += distance(prev, p)
+    if (best) {
+      const gap = distance(p, best.light)
+      if (gap > best.gap) break
+      best.gap = gap
+      best.walked = walked
+      continue
+    }
+    if (walked > QUEUE_M) break
+    const light = near.find(l => distance(p, l) <= SIGNAL_PASS_M)
+    if (light) best = { light, gap: distance(p, light), walked }
+  }
+  return best ? Math.round(best.walked) : null
 }
 
 /**
@@ -251,7 +303,22 @@ export async function observedStops(points) {
         areaId: area.id, logoAt: area.logoAt ?? null,
         reason: 'A webes felületen megrajzolt területen belül.' }
     }
-    return classifyObservedStop(p, [...(datasets.get(key(p)) ?? []), ...nearbyRoadLayer(p)], signals)
+    const elements = [...(datasets.get(key(p)) ?? []), ...nearbyRoadLayer(p)]
+    const result = classifyObservedStop(p, elements, signals)
+    if (result.type !== 'ROAD') return result
+    // Úton állva a lámpa légvonalban gyakran messzebb van, mint gondolnánk: a
+    // nyomvonal mentén előtted lévő lámpa dönt. Közel hozzá a sor elején
+    // álltál, messzebb a mögötte feltorlódott sorban.
+    const lights = signals.concat(elements.filter(e => e.tags?.highway === 'traffic_signals')
+      .map(e => e.center ?? (Number.isFinite(e.lat) ? e : null)).filter(Boolean))
+    const ahead = signalAhead(p, points, lights)
+    if (ahead === null) return result
+    if (ahead <= SIGNAL_FRONT_M) {
+      return { ...result, type: 'SIGNAL', signalDistanceM: ahead,
+        reason: `Úton, közvetlenül egy jelzőlámpa előtt (kb. ${ahead} méterre) történt várakozás (becslés).` }
+    }
+    return { ...result, type: 'SIGNAL_QUEUE', signalDistanceM: ahead,
+      reason: `Lámpa miatti sorban állás: a jelzőlámpa még kb. ${ahead} méterrel előtted volt, nem tudtál odáig előremenni (becslés).` }
   })
   return { stops: [...visits, ...classified].sort((a, b) => a.startedAt - b.startedAt), offline }
 }

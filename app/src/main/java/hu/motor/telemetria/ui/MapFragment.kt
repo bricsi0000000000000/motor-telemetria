@@ -116,6 +116,8 @@ class MapFragment : Fragment() {
     private val polylines = mutableListOf<Polyline>()
 
     private var positionMarker: Marker? = null
+    /** A jelölő épp a séta ikonját mutatja-e; null, ha még nincs ikonja. */
+    private var positionWalking: Boolean? = null
     private var accuracyCircle: Polygon? = null
 
     /** Az otthon / munkahely / célpont jelölői és köreik. */
@@ -876,7 +878,8 @@ class MapFragment : Fragment() {
                     observedStops[index] = stop.copy(id = old.id, startedAt = minOf(old.startedAt, stop.startedAt),
                         type = if (stop.type == "OTHER") old.type else stop.type,
                         name = stop.name ?: old.name, brand = stop.brand ?: old.brand,
-                        areaId = stop.areaId ?: old.areaId, durationMs = stop.durationMs ?: old.durationMs)
+                        areaId = stop.areaId ?: old.areaId, durationMs = stop.durationMs ?: old.durationMs,
+                        signalDistanceM = stop.signalDistanceM ?: old.signalDistanceM)
                 } else observedStops.add(stop)
             }
             stopMarkers?.show(observedStops.toList())
@@ -1012,12 +1015,19 @@ class MapFragment : Fragment() {
 
         val marker = positionMarker ?: Marker(binding.map).also {
             it.setAnchor(Marker.ANCHOR_CENTER, Marker.ANCHOR_CENTER)
-            it.icon = ContextCompat.getDrawable(requireContext(), R.drawable.ic_position)
             it.setInfoWindow(null)
             positionMarker = it
+            positionWalking = null
             binding.map.overlays.add(it)
         }
         marker.position = position
+        // Gyalog bejárt területen (bolt, benzinkút…) belül sétálsz: a jelölő is ezt mutatja.
+        val walking = ObservedStopRepository.visitAreaAt(position.latitude, position.longitude) != null
+        if (walking != positionWalking) {
+            positionWalking = walking
+            marker.icon = ContextCompat.getDrawable(requireContext(),
+                if (walking) R.drawable.ic_position_walk else R.drawable.ic_position)
+        }
     }
 
     private fun bringPositionMarkerToFront() {

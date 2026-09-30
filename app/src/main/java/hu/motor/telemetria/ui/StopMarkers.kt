@@ -24,7 +24,8 @@ class StopMarkers(private val context: Context, private val map: MapView) {
     private var stops = emptyList<Stop>()
     private val density = context.resources.displayMetrics.density
     private val pins = HashMap<String, Pin>()
-    private val labels = linkedMapOf("ROAD" to "Forgalomban állás", "SIGNAL" to "Lámpánál állás", "SHOP" to "Bolt / bevásárlás",
+    private val labels = linkedMapOf("ROAD" to "Forgalomban állás", "SIGNAL" to "Lámpánál állás",
+        "SIGNAL_QUEUE" to "Lámpa miatti sor (még messze a lámpától)", "SHOP" to "Bolt / bevásárlás",
         "FUEL" to "Tankolás", "PARKING" to "Út melletti megállás", "PLACE" to "Más hely felkeresése", "OTHER" to "Ismeretlen megállás")
 
     /** Az ikon és alatta a kártya; a horgony a kettő találkozásánál van. */
@@ -97,9 +98,12 @@ class StopMarkers(private val context: Context, private val map: MapView) {
             val brand = if (manual == null && area == null && type == "SHOP") ShopBadges[stop.brand] else null
             val millis = stop.shownMillis
             val duration = Fmt.stopDuration(millis)
+            // Lámpánál azt is látni kell, milyen messze álltál tőle.
+            val signalDistance = stop.signalDistanceM?.takeIf { manual == null && type in setOf("SIGNAL", "SIGNAL_QUEUE") }
             val text = when {
                 area != null -> "${area.name} · $duration"
                 brand != null -> "${brand.label} · $duration"
+                signalDistance != null -> "$duration · lámpa $signalDistance m"
                 else -> duration
             }
             val pin = if (area != null) {
@@ -109,6 +113,7 @@ class StopMarkers(private val context: Context, private val map: MapView) {
                 val icon = when (type) {
                     "ROAD" -> R.drawable.ic_stop_road
                     "SIGNAL" -> R.drawable.ic_stop_signal
+                    "SIGNAL_QUEUE" -> R.drawable.ic_stop_signal_queue
                     "SHOP" -> R.drawable.ic_stop_shop
                     "FUEL" -> R.drawable.ic_stop_fuel
                     "PARKING" -> R.drawable.ic_stop_parking

@@ -52,9 +52,13 @@ import hu.motor.telemetria.widget.StatsWidgetRenderer
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import org.osmdroid.events.MapListener
+import org.osmdroid.events.ScrollEvent
+import org.osmdroid.events.ZoomEvent
 import org.osmdroid.tileprovider.tilesource.TileSourceFactory
 import org.osmdroid.util.BoundingBox
 import org.osmdroid.util.GeoPoint
+import org.osmdroid.util.TileSystem
 import org.osmdroid.views.CustomZoomButtonsController
 import org.osmdroid.views.overlay.Marker
 import org.osmdroid.views.overlay.Polyline
@@ -85,6 +89,10 @@ class TrackDetailActivity : AppCompatActivity() {
     private val trackOverlays = mutableListOf<Polyline>()
     private val speedSectionMarkers = mutableListOf<Marker>()
     private val speedCardCache = mutableMapOf<SpeedCardKey, BitmapDrawable>()
+    private var drawnSections: List<SpeedSection> = emptyList()
+
+    /** Melyik (félszintre kerekített) nagyításhoz készültek a kártyák. */
+    private var speedCardZoom = Double.NaN
 
     private data class SpeedSection(
         @ColorInt val color: Int,
@@ -93,7 +101,9 @@ class TrackDetailActivity : AppCompatActivity() {
         val maxKmh: Int,
         /** Gyalog bejárt területen belül: séta, a sebesség nem számít. */
         val walking: Boolean = false
-    )
+    ) {
+        val lengthMeters: Double = path.zipWithNext { a, b -> a.distanceToAsDouble(b) }.sum()
+    }
 
     private data class SpeedCardKey(@ColorInt val color: Int, val minKmh: Int, val maxKmh: Int)
 
@@ -103,10 +113,9 @@ class TrackDetailActivity : AppCompatActivity() {
     private fun redrawTrack() {
         trackOverlays.forEach { binding.map.overlays.remove(it) }
         trackOverlays.clear()
-        speedSectionMarkers.forEach { binding.map.overlays.remove(it) }
-        speedSectionMarkers.clear()
 
-        for (section in speedSections()) {
+        drawnSections = speedSections()
+        for (section in drawnSections) {
             val line = Polyline(binding.map).apply {
                 setPoints(section.path)
                 outlinePaint.color = section.color
@@ -115,26 +124,99 @@ class TrackDetailActivity : AppCompatActivity() {
             }
             trackOverlays.add(line)
             binding.map.overlays.add(0, line)
-            // A sétának nincs sebességkártyája: a terület egy pontként, a megállásjelölővel látszik.
-            if (section.walking) continue
+        }
+        highlightOverlay?.let { binding.map.overlays.remove(it) }
+        highlightOverlay = null
+        speedCardZoom = Double.NaN
+        updateSpeedCards()
+    }
 
+    /**
+     * A sebességkártyák a nagyításhoz igazodnak: messziről az egymás melletti
+     * szakaszok egy kártyát kapnak, az összevont szakaszok min/max sebességével.
+     * Egy kártyára legalább ennyi képpontnyi nyomvonal jut.
+     */
+    private fun updateSpeedCards() {
+        val zoom = (binding.map.zoomLevelDouble * 2).roundToInt() / 2.0
+        if (zoom == speedCardZoom) return
+        speedCardZoom = zoom
+
+        speedSectionMarkers.forEach { binding.map.overlays.remove(it) }
+        speedSectionMarkers.clear()
+
+        val centre = binding.map.mapCenter
+        val metersPerPixel = TileSystem.GroundResolution(centre.latitude, zoom)
+        val minMeters = 140f * resources.displayMetrics.density * metersPerPixel
+
+        val groups = mutableListOf<MutableList<SpeedSection>>()
+        var group = mutableListOf<SpeedSection>()
+        var groupMeters = 0.0
+        // Az aktuális csoport előtt séta volt – akkor nem folytatása az előzőnek.
+        var afterWalk = false
+        for (section in drawnSections) {
+            // A sétának nincs sebességkártyája, csak egy sétáló ikonja, és el is
+            // választja a két oldalát.
+            if (section.walking) {
+                val marker = Marker(binding.map).apply {
+                    position = pointAtHalfLength(section.path)
+                    setAnchor(Marker.ANCHOR_CENTER, Marker.ANCHOR_CENTER)
+                    icon = ContextCompat.getDrawable(this@TrackDetailActivity, R.drawable.ic_walk)
+                    setInfoWindow(null)
+                }
+                speedSectionMarkers += marker
+                binding.map.overlays.add(marker)
+                if (group.isNotEmpty()) groups += group
+                group = mutableListOf()
+                groupMeters = 0.0
+                afterWalk = true
+                continue
+            }
+            group += section
+            groupMeters += section.lengthMeters
+            if (groupMeters >= minMeters) {
+                groups += group
+                group = mutableListOf()
+                groupMeters = 0.0
+                afterWalk = false
+            }
+        }
+        // A túl rövid maradék az előzőhöz csapódik, ha az közvetlenül előtte volt.
+        if (group.isNotEmpty()) {
+            val last = groups.lastOrNull()
+            if (last != null && !afterWalk) last += group
+            else groups += group
+        }
+
+        for (members in groups) {
+            val fastest = members.maxBy { it.maxKmh }
+            val merged = SpeedSection(
+                color = fastest.color,
+                path = members.flatMap { it.path },
+                minKmh = members.minOf { it.minKmh },
+                maxKmh = fastest.maxKmh
+            )
             val marker = Marker(binding.map).apply {
-                position = section.path[section.path.size / 2]
+                position = pointAtHalfLength(merged.path)
                 setAnchor(Marker.ANCHOR_CENTER, Marker.ANCHOR_BOTTOM)
-                icon = speedSectionCard(section)
-                title = getString(
-                    R.string.speed_section_min_max,
-                    section.minKmh,
-                    section.maxKmh
-                )
+                icon = speedSectionCard(merged)
+                title = getString(R.string.speed_section_min_max, merged.minKmh, merged.maxKmh)
                 setInfoWindow(null)
             }
             speedSectionMarkers += marker
             binding.map.overlays.add(marker)
         }
-        highlightOverlay?.let { binding.map.overlays.remove(it) }
-        highlightOverlay = null
         binding.map.invalidate()
+    }
+
+    /** A vonal hossza szerinti felezőpont – a kártya ide kerül. */
+    private fun pointAtHalfLength(path: List<GeoPoint>): GeoPoint {
+        val half = path.zipWithNext { a, b -> a.distanceToAsDouble(b) }.sum() / 2
+        var walked = 0.0
+        for ((a, b) in path.zipWithNext()) {
+            walked += a.distanceToAsDouble(b)
+            if (walked >= half) return b
+        }
+        return path[path.size / 2]
     }
 
     /**
@@ -306,6 +388,13 @@ class TrackDetailActivity : AppCompatActivity() {
             if (ThemeSettings.isNight(this@TrackDetailActivity)) {
                 overlayManager.tilesOverlay.setColorFilter(TilesOverlay.INVERT_COLORS)
             }
+            addMapListener(object : MapListener {
+                override fun onScroll(event: ScrollEvent?) = false
+                override fun onZoom(event: ZoomEvent?): Boolean {
+                    updateSpeedCards()
+                    return false
+                }
+            })
         }
 
         setUpBottomSheet()

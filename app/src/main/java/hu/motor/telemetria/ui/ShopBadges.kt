@@ -44,6 +44,7 @@ object ShopBadges {
         "PLACE" to 0xFFDB2777.toInt(),
         "PARKING" to 0xFF2563EB.toInt(),
         "SIGNAL" to 0xFF475569.toInt(),
+        "SIGNAL_QUEUE" to 0xFFF59E0B.toInt(),
         "ROAD" to 0xFFF59E0B.toInt()
     )
 
