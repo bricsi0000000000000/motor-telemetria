@@ -5,6 +5,7 @@ import { scheduleAggregate } from '../aggregate.js'
 export const syncRouter = Router()
 
 const num = (value, fallback = 0) => (Number.isFinite(Number(value)) ? Number(value) : fallback)
+const nullableNum = (value) => (value === null || value === undefined ? null : num(value))
 
 /**
  * A telefon szinkron végpontja.
@@ -34,6 +35,15 @@ syncRouter.post('/sync', (req, res) => {
         (track_id, seq, lat, lon, altitude, speed_mps, accuracy, bearing, time, segment)
       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `)
+    const insertTelemetry = db.prepare(`
+      INSERT OR IGNORE INTO telemetry_samples
+        (track_id, seq, time, lat, lon, speed_mps, bearing_deg, pressure_hpa, fused_altitude_m,
+         forward_mean_mps2, forward_min_mps2, forward_max_mps2,
+         lateral_mean_mps2, lateral_rms_mps2, lateral_peak_mps2,
+         vertical_rms_mps2, vertical_peak_mps2, yaw_peak_rads, roll_peak_rads,
+         lean_degrees, mount_quality, sample_count, flags)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `)
 
     return tracks.map((track) => {
       const clientId = num(track?.clientId)
@@ -41,7 +51,7 @@ syncRouter.post('/sync', (req, res) => {
       // marad érvényben, nem nullázzuk le a hiányzó mezőket.
       const previous = one(
         `SELECT start_time, end_time, distance_m, duration_ms, moving_ms, max_speed_mps,
-                elevation_gain_m, point_count
+                elevation_gain_m, point_count, telemetry_version, telemetry_sample_count
          FROM tracks WHERE device_uid = ? AND client_id = ?`,
         deviceUid,
         clientId
@@ -57,8 +67,9 @@ syncRouter.post('/sync', (req, res) => {
       run(
         `INSERT INTO tracks (device_uid, client_id, start_time, end_time, distance_m,
                              duration_ms, moving_ms, max_speed_mps, elevation_gain_m,
-                             point_count, created_at, updated_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                             point_count, telemetry_version, telemetry_sample_count,
+                             created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
          ON CONFLICT (device_uid, client_id) DO UPDATE SET
            start_time       = excluded.start_time,
            end_time         = excluded.end_time,
@@ -68,6 +79,8 @@ syncRouter.post('/sync', (req, res) => {
            max_speed_mps    = excluded.max_speed_mps,
            elevation_gain_m = excluded.elevation_gain_m,
            point_count      = excluded.point_count,
+           telemetry_version = excluded.telemetry_version,
+           telemetry_sample_count = excluded.telemetry_sample_count,
            updated_at       = excluded.updated_at`,
         deviceUid,
         clientId,
@@ -79,6 +92,8 @@ syncRouter.post('/sync', (req, res) => {
         num(track?.maxSpeedMps, previous?.max_speed_mps ?? 0),
         num(track?.elevationGainMeters, previous?.elevation_gain_m ?? 0),
         num(track?.pointCount, previous?.point_count ?? 0),
+        num(track?.telemetryVersion, previous?.telemetry_version ?? 0),
+        num(track?.telemetrySampleCount, previous?.telemetry_sample_count ?? 0),
         now,
         now
       )
@@ -106,13 +121,47 @@ syncRouter.post('/sync', (req, res) => {
         )
       }
 
+      const telemetry = Array.isArray(track?.telemetrySamples) ? track.telemetrySamples : []
+      for (const sample of telemetry) {
+        insertTelemetry.run(
+          trackId,
+          num(sample?.seq),
+          num(sample?.time, now),
+          nullableNum(sample?.lat),
+          nullableNum(sample?.lon),
+          num(sample?.speedMps),
+          num(sample?.bearingDegrees),
+          nullableNum(sample?.pressureHpa),
+          nullableNum(sample?.fusedAltitudeMeters),
+          num(sample?.forwardMeanMps2),
+          num(sample?.forwardMinMps2),
+          num(sample?.forwardMaxMps2),
+          num(sample?.lateralMeanMps2),
+          num(sample?.lateralRmsMps2),
+          num(sample?.lateralPeakMps2),
+          num(sample?.verticalRmsMps2),
+          num(sample?.verticalPeakMps2),
+          num(sample?.yawPeakRadS),
+          num(sample?.rollPeakRadS),
+          nullableNum(sample?.leanDegrees),
+          num(sample?.mountQuality),
+          num(sample?.sampleCount),
+          num(sample?.flags)
+        )
+      }
+
       const stored = one('SELECT COUNT(*) AS c FROM track_points WHERE track_id = ?', trackId)
+      const storedTelemetry = one(
+        'SELECT COUNT(*) AS c FROM telemetry_samples WHERE track_id = ?',
+        trackId
+      )
 
       return {
         clientId,
         serverId: trackId,
         // A telefon ebből tudja, hány pontot nem kell többé küldenie.
         storedPoints: stored.c,
+        storedTelemetrySamples: storedTelemetry.c,
         sentPoints: points.length
       }
     })

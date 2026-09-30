@@ -2,12 +2,23 @@ package hu.motor.telemetria
 
 import android.content.Intent
 import android.content.res.ColorStateList
+import android.graphics.Bitmap
+import android.graphics.Canvas
+import android.graphics.Paint
+import android.graphics.Path
+import android.graphics.RectF
+import android.graphics.Typeface
+import android.graphics.drawable.BitmapDrawable
 import android.os.Bundle
+import android.text.SpannableStringBuilder
+import android.text.Spanned
+import android.text.style.ForegroundColorSpan
 import android.view.View
 import android.util.TypedValue
 import android.view.LayoutInflater
 import android.widget.TextView
 import android.widget.Toast
+import androidx.annotation.ColorInt
 import androidx.annotation.ColorRes
 import androidx.annotation.StringRes
 import androidx.appcompat.app.AlertDialog
@@ -19,10 +30,13 @@ import androidx.lifecycle.lifecycleScope
 import hu.motor.telemetria.analysis.AnalysisRepository
 import hu.motor.telemetria.analysis.AnalysisSection
 import hu.motor.telemetria.analysis.TrackAnalysis
+import hu.motor.telemetria.analysis.TelemetryMath
+import hu.motor.telemetria.analysis.SpeedBand
 import hu.motor.telemetria.data.AppDatabase
 import hu.motor.telemetria.data.PendingDelete
 import hu.motor.telemetria.data.Track
 import hu.motor.telemetria.ui.StopMarkers
+import hu.motor.telemetria.net.AreaRepository
 import hu.motor.telemetria.net.ObservedStopRepository
 import hu.motor.telemetria.net.DisplayTrackRepository
 import hu.motor.telemetria.service.PathPoint
@@ -44,6 +58,8 @@ import org.osmdroid.views.CustomZoomButtonsController
 import org.osmdroid.views.overlay.Marker
 import org.osmdroid.views.overlay.Polyline
 import org.osmdroid.views.overlay.TilesOverlay
+import kotlin.math.ceil
+import kotlin.math.roundToInt
 
 class TrackDetailActivity : AppCompatActivity() {
 
@@ -58,9 +74,6 @@ class TrackDetailActivity : AppCompatActivity() {
     private var track: Track? = null
     private var points: List<TrackPoint> = emptyList()
 
-    /** Az elemzés kiemelt szakaszai a nyomvonalra rajzolva. */
-    private val analysisOverlays = mutableListOf<Polyline>()
-
     /** A listából kiválasztott szakasz kiemelése. */
     private var highlightOverlay: Polyline? = null
 
@@ -69,7 +82,17 @@ class TrackDetailActivity : AppCompatActivity() {
     private var stopMarkers: StopMarkers? = null
     private var displayTrack: DisplayTrackRepository.Display? = null
     private val trackOverlays = mutableListOf<Polyline>()
-    private var lastAnalysis: TrackAnalysis? = null
+    private val speedSectionMarkers = mutableListOf<Marker>()
+    private val speedCardCache = mutableMapOf<SpeedCardKey, BitmapDrawable>()
+
+    private data class SpeedSection(
+        @ColorInt val color: Int,
+        val path: List<GeoPoint>,
+        val minKmh: Int,
+        val maxKmh: Int
+    )
+
+    private data class SpeedCardKey(@ColorInt val color: Int, val minKmh: Int, val maxKmh: Int)
 
     private fun displayLinks(): List<List<GeoPoint>> = if (binding.smartTrack.isChecked && displayTrack != null) displayTrack!!.links
         else DisplayTrackRepository.rawLinks(points.map { PathPoint(it.lat, it.lon, it.segment, it.speedMps, it.accuracy, it.time) })
@@ -77,19 +100,168 @@ class TrackDetailActivity : AppCompatActivity() {
     private fun redrawTrack() {
         trackOverlays.forEach { binding.map.overlays.remove(it) }
         trackOverlays.clear()
-        for (path in DisplayTrackRepository.paths(displayLinks())) {
+        speedSectionMarkers.forEach { binding.map.overlays.remove(it) }
+        speedSectionMarkers.clear()
+
+        for (section in speedSections()) {
             val line = Polyline(binding.map).apply {
-                setPoints(path)
-                outlinePaint.color = ContextCompat.getColor(this@TrackDetailActivity, R.color.track)
+                setPoints(section.path)
+                outlinePaint.color = section.color
                 outlinePaint.strokeWidth = 12f
             }
             trackOverlays.add(line)
             binding.map.overlays.add(0, line)
+
+            val marker = Marker(binding.map).apply {
+                position = section.path[section.path.size / 2]
+                setAnchor(Marker.ANCHOR_CENTER, Marker.ANCHOR_BOTTOM)
+                icon = speedSectionCard(section)
+                title = getString(
+                    R.string.speed_section_min_max,
+                    section.minKmh,
+                    section.maxKmh
+                )
+                setInfoWindow(null)
+            }
+            speedSectionMarkers += marker
+            binding.map.overlays.add(marker)
         }
         highlightOverlay?.let { binding.map.overlays.remove(it) }
         highlightOverlay = null
-        lastAnalysis?.let { drawAnalysisOverlays(it) }
         binding.map.invalidate()
+    }
+
+    /** Az útra illesztett kapcsolat az eredeti pontpár sebességét tartja meg. */
+    private fun speedSections(): List<SpeedSection> {
+        val result = mutableListOf<SpeedSection>()
+        var activeColor: Int? = null
+        var active = mutableListOf<GeoPoint>()
+        var activeMinKmh = Int.MAX_VALUE
+        var activeMaxKmh = Int.MIN_VALUE
+
+        fun flush() {
+            activeColor?.let { color ->
+                if (active.size > 1 && activeMinKmh != Int.MAX_VALUE) {
+                    result += SpeedSection(
+                        color = color,
+                        path = active.toList(),
+                        minKmh = activeMinKmh,
+                        maxKmh = activeMaxKmh
+                    )
+                }
+            }
+            activeColor = null
+            active = mutableListOf()
+            activeMinKmh = Int.MAX_VALUE
+            activeMaxKmh = Int.MIN_VALUE
+        }
+
+        displayLinks().forEachIndexed { index, link ->
+            if (link.isEmpty() || index + 1 >= points.size) {
+                flush()
+                return@forEachIndexed
+            }
+            val speedKmh = (points[index + 1].speedMps * 3.6f).coerceAtLeast(0f).roundToInt()
+            val color = speedColor(points[index + 1].speedMps)
+            if (activeColor != color) flush()
+            if (active.isEmpty()) active.addAll(link)
+            else active.addAll(link.drop(if (active.last() == link.first()) 1 else 0))
+            activeColor = color
+            activeMinKmh = minOf(activeMinKmh, speedKmh)
+            activeMaxKmh = maxOf(activeMaxKmh, speedKmh)
+        }
+        flush()
+        return result
+    }
+
+    /** Mindig látható, a szakasz fölött lebegő min/max sebességkártya. */
+    private fun speedSectionCard(section: SpeedSection): BitmapDrawable {
+        val key = SpeedCardKey(section.color, section.minKmh, section.maxKmh)
+        return speedCardCache.getOrPut(key) {
+            val density = resources.displayMetrics.density
+            val scaledDensity = resources.displayMetrics.scaledDensity
+            val label = getString(
+                R.string.speed_section_min_max,
+                section.minKmh,
+                section.maxKmh
+            )
+            val textPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+                color = ContextCompat.getColor(this@TrackDetailActivity, R.color.on_surface)
+                textSize = 11f * scaledDensity
+                typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
+            }
+            val horizontalPadding = 10f * density
+            val verticalPadding = 7f * density
+            val dotRadius = 3.5f * density
+            val dotGap = 7f * density
+            val pointerHeight = 6f * density
+            val shadowPadding = 3f * density
+            val textMetrics = textPaint.fontMetrics
+            val textHeight = textMetrics.descent - textMetrics.ascent
+            val cardWidth = horizontalPadding * 2 + dotRadius * 2 + dotGap + textPaint.measureText(label)
+            val cardHeight = verticalPadding * 2 + textHeight
+            val bitmap = Bitmap.createBitmap(
+                ceil(cardWidth + shadowPadding * 2).toInt(),
+                ceil(cardHeight + pointerHeight + shadowPadding * 2).toInt(),
+                Bitmap.Config.ARGB_8888
+            )
+            val canvas = Canvas(bitmap)
+            val card = RectF(
+                shadowPadding,
+                shadowPadding,
+                shadowPadding + cardWidth,
+                shadowPadding + cardHeight
+            )
+            val cornerRadius = 9f * density
+            val fillPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+                color = ContextCompat.getColor(this@TrackDetailActivity, R.color.surface)
+                setShadowLayer(2.5f * density, 0f, 1.5f * density, 0x55000000)
+            }
+            canvas.drawRoundRect(card, cornerRadius, cornerRadius, fillPaint)
+
+            val borderPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+                color = section.color
+                style = Paint.Style.STROKE
+                strokeWidth = 2f * density
+            }
+            canvas.drawRoundRect(card, cornerRadius, cornerRadius, borderPaint)
+
+            val pointerX = bitmap.width / 2f
+            val pointer = Path().apply {
+                moveTo(pointerX - 5f * density, card.bottom - density)
+                lineTo(pointerX + 5f * density, card.bottom - density)
+                lineTo(pointerX, card.bottom + pointerHeight)
+                close()
+            }
+            canvas.drawPath(pointer, Paint(Paint.ANTI_ALIAS_FLAG).apply { color = section.color })
+
+            val dotX = card.left + horizontalPadding + dotRadius
+            val centreY = card.centerY()
+            canvas.drawCircle(
+                dotX,
+                centreY,
+                dotRadius,
+                Paint(Paint.ANTI_ALIAS_FLAG).apply { color = section.color }
+            )
+            val baseline = centreY - (textMetrics.ascent + textMetrics.descent) / 2f
+            canvas.drawText(label, dotX + dotRadius + dotGap, baseline, textPaint)
+            BitmapDrawable(resources, bitmap)
+        }
+    }
+
+    @ColorInt
+    private fun speedColor(speedMps: Float): Int {
+        val resource = when (TelemetryMath.speedBand(speedMps)) {
+            SpeedBand.STOPPED -> R.color.speed_0
+            SpeedBand.GREEN -> R.color.speed_10
+            SpeedBand.YELLOW -> R.color.speed_30
+            SpeedBand.ORANGE -> R.color.speed_50
+            SpeedBand.LIGHT_BLUE -> R.color.speed_69
+            SpeedBand.DARK_BLUE -> R.color.speed_90
+            SpeedBand.PINK -> R.color.speed_120
+            SpeedBand.PURPLE -> R.color.speed_over_120
+        }
+        return ContextCompat.getColor(this, resource)
     }
 
     private lateinit var sheet: BottomSheetBehavior<View>
@@ -119,6 +291,7 @@ class TrackDetailActivity : AppCompatActivity() {
         }
 
         setUpBottomSheet()
+        setUpSpeedLegend()
 
         binding.btnExport.setOnClickListener { exportGpx() }
         binding.btnDelete.setOnClickListener { confirmDelete() }
@@ -130,6 +303,34 @@ class TrackDetailActivity : AppCompatActivity() {
             redrawTrack()
         }
         load()
+    }
+
+    private fun setUpSpeedLegend() {
+        val bands = listOf(
+            R.color.speed_0 to "0",
+            R.color.speed_10 to "1–10",
+            R.color.speed_30 to "11–30",
+            R.color.speed_50 to "31–50",
+            R.color.speed_69 to "51–69",
+            R.color.speed_90 to "70–90",
+            R.color.speed_120 to "91–120",
+            R.color.speed_over_120 to "120+"
+        )
+        binding.tvSpeedLegend.text = SpannableStringBuilder().apply {
+            bands.forEachIndexed { index, (colorRes, label) ->
+                if (index > 0) append("  ")
+                val start = length
+                append("●")
+                setSpan(
+                    ForegroundColorSpan(ContextCompat.getColor(this@TrackDetailActivity, colorRes)),
+                    start,
+                    length,
+                    Spanned.SPAN_EXCLUSIVE_EXCLUSIVE
+                )
+                append(" $label")
+            }
+            append(" km/h")
+        }
     }
 
     /** A lap alaphelyzetben félig van felhúzva, és kézzel bármeddig húzható. */
@@ -159,13 +360,21 @@ class TrackDetailActivity : AppCompatActivity() {
             }
             track = loaded.first
             points = loaded.second
+            val telemetry = withContext(Dispatchers.IO) { dao.getTelemetry(trackId) }
+            binding.telemetryChart.setSamples(telemetry)
+            binding.tvTelemetryChartTitle.visibility = if (telemetry.isEmpty()) View.GONE else View.VISIBLE
             renderStats(loaded.first)
             renderMap(loaded.second)
             loadAnalysis()
             stopMarkers = StopMarkers(this@TrackDetailActivity, binding.map)
             val pathPoints = points.map { PathPoint(it.lat, it.lon, it.segment, it.speedMps, it.accuracy, it.time) }
+            // A megrajzolt területek kellenek a megállások nevéhez és logójához.
+            AreaRepository.loadCached(applicationContext)
             stopMarkers?.show(ObservedStopRepository.detect(pathPoints))
-            lifecycleScope.launch { stopMarkers?.show(ObservedStopRepository.load(pathPoints)) }
+            lifecycleScope.launch {
+                AreaRepository.refresh(applicationContext)
+                stopMarkers?.show(ObservedStopRepository.load(pathPoints))
+            }
             binding.trackDisplayStatus.text = "Útra illesztés ellenőrzése… Az eredeti GPS-vonal már látható."
             displayTrack = DisplayTrackRepository.load(this@TrackDetailActivity,
                 points.map { PathPoint(it.lat, it.lon, it.segment, it.speedMps, it.accuracy, it.time) })
@@ -274,68 +483,38 @@ class TrackDetailActivity : AppCompatActivity() {
             )
         )
 
-        val limit = summary.limit
-        when {
-            limit.error != null ->
-                addLine(getString(R.string.analysis_limit_failed, limit.error))
-
-            limit.coverage <= 0.0 ->
-                addLine(getString(R.string.analysis_limit_unknown))
-
-            limit.aboveShare <= 0.0 ->
-                addLine(getString(R.string.analysis_limit_clean))
-
-            else -> {
-                addLine(
-                    getString(
-                        R.string.analysis_limit_above,
-                        Fmt.percent(limit.aboveShare),
-                        Fmt.distance(limit.aboveDistanceMeters),
-                        Fmt.duration(limit.aboveDurationMillis)
-                    )
+        summary.telemetry?.let { telemetry ->
+            addLine(
+                getString(
+                    R.string.analysis_telemetry_summary,
+                    telemetry.validSampleCount,
+                    Fmt.percent(telemetry.qualityCoverage),
+                    telemetry.maxAccelerationMps2,
+                    telemetry.maxBrakingMps2
                 )
-                if (limit.maxOverAtLimitKmh != null) {
-                    addLine(
-                        getString(
-                            R.string.analysis_limit_max,
-                            limit.maxOverKmh.toInt(),
-                            limit.maxOverAtLimitKmh,
-                            limit.maxOverSpeedKmh.toInt()
-                        )
-                    )
-                }
+            )
+            if (!telemetry.personalizationEligible) {
+                addLine(getString(R.string.analysis_telemetry_learning))
             }
-        }
-        limit.avgRatio?.let {
-            addLine(getString(R.string.analysis_limit_ratio, Fmt.ratio(it)))
-        }
-        if (limit.coverage > 0.0 && limit.coverage < 0.9) {
-            addLine(getString(R.string.analysis_limit_coverage, Fmt.percent(limit.coverage)))
-        }
-
-        // --- szakaszok ---
-        addGroup(R.string.analysis_group_speeding, analysis.speeding, R.color.speeding) { section ->
-            val over = section.maxOverKmh?.toInt() ?: 0
-            SectionText(
-                title = section.road ?: getString(R.string.section_speeding),
-                detail = getString(
-                    R.string.section_detail_limit,
-                    Fmt.kmh(section.maxKmh),
-                    section.limitKmh ?: 0,
-                    Fmt.distance(section.distanceMeters)
-                ),
-                value = "+$over"
+            addLine(
+                getString(
+                    R.string.analysis_telemetry_detail,
+                    telemetry.maxLeanDegrees,
+                    Fmt.meters(telemetry.fusedElevationGainMeters),
+                    telemetry.roughEventCount,
+                    telemetry.incidentCandidateCount
+                )
             )
         }
 
+        // --- szakaszok ---
         addGroup(R.string.analysis_group_fast, analysis.fast, R.color.brand) { section ->
             SectionText(
                 title = section.road ?: getString(R.string.section_fast),
                 detail = getString(
                     R.string.section_detail_speed,
                     Fmt.distance(section.distanceMeters),
-                    Fmt.duration(section.durationMillis),
-                    section.limitKmh?.let { "$it km/h" } ?: getString(R.string.no_data)
+                    Fmt.duration(section.durationMillis)
                 ),
                 value = Fmt.kmh(section.avgKmh)
             )
@@ -379,10 +558,38 @@ class TrackDetailActivity : AppCompatActivity() {
             )
         }
 
+        fun telemetryText(section: AnalysisSection, title: String, suffix: String) = SectionText(
+            title = title,
+            detail = getString(
+                R.string.analysis_telemetry_event_detail,
+                Fmt.dateTime(section.startTime),
+                Fmt.kmh(section.avgKmh),
+                Fmt.percent(section.mountQuality ?: 0.0)
+            ),
+            value = String.format("%.1f %s", section.telemetryValue ?: 0.0, suffix)
+        )
+        addGroup(R.string.analysis_group_braking, analysis.braking, R.color.speeding) {
+            telemetryText(it, getString(R.string.analysis_group_braking), "m/s²")
+        }
+        addGroup(R.string.analysis_group_acceleration, analysis.acceleration, R.color.limit_50) {
+            telemetryText(it, getString(R.string.analysis_group_acceleration), "m/s²")
+        }
+        addGroup(R.string.analysis_group_roughness, analysis.roughness, R.color.limit_90) {
+            telemetryText(it, getString(R.string.analysis_group_roughness), "m/s²")
+        }
+        addGroup(
+            R.string.analysis_group_incidents,
+            analysis.incidents,
+            R.color.climb,
+            onLongClick = ::labelIncident
+        ) {
+            val label = eventLabelText(it.eventLabel) ?: getString(R.string.event_label_hold_hint)
+            telemetryText(it, "${getString(R.string.analysis_group_incidents)} · $label", "")
+        }
+
         if (container.childCount == 0) addLine(getString(R.string.analysis_no_sections))
 
         analysisPointCount = analysis.pointCount
-        drawAnalysisOverlays(analysis)
     }
 
     private class SectionText(val title: String, val detail: String, val value: String)
@@ -399,6 +606,7 @@ class TrackDetailActivity : AppCompatActivity() {
         @StringRes titleRes: Int,
         sections: List<AnalysisSection>,
         @ColorRes colorRes: Int,
+        onLongClick: ((AnalysisSection) -> Unit)? = null,
         describe: (AnalysisSection) -> SectionText
     ) {
         if (sections.isEmpty()) return
@@ -424,8 +632,51 @@ class TrackDetailActivity : AppCompatActivity() {
             row.root.isClickable = true
             row.root.setBackgroundResource(selectableItemBackground)
             row.root.setOnClickListener { focusSection(section, color) }
+            if (onLongClick != null && section.eventId != null) {
+                row.root.setOnLongClickListener {
+                    onLongClick(section)
+                    true
+                }
+            }
             binding.analysisContainer.addView(row.root)
         }
+    }
+
+    private fun labelIncident(section: AnalysisSection) {
+        val current = track ?: return
+        val eventId = section.eventId ?: return
+        val labels = arrayOf(
+            getString(R.string.event_label_real),
+            getString(R.string.event_label_pothole),
+            getString(R.string.event_label_phone),
+            getString(R.string.event_label_false)
+        )
+        val values = arrayOf("REAL_EVENT", "POTHOLE", "PHONE_MOVED", "FALSE_POSITIVE")
+        AlertDialog.Builder(this)
+            .setTitle(R.string.event_label_title)
+            .setItems(labels) { _, which ->
+                lifecycleScope.launch {
+                    AnalysisRepository.labelIncident(
+                        this@TrackDetailActivity, current, eventId, values[which]
+                    ).onSuccess(::render).onFailure { error ->
+                        Toast.makeText(
+                            this@TrackDetailActivity,
+                            getString(R.string.event_label_error, error.message.orEmpty()),
+                            Toast.LENGTH_LONG
+                        ).show()
+                    }
+                }
+            }
+            .setNegativeButton(android.R.string.cancel, null)
+            .show()
+    }
+
+    private fun eventLabelText(label: String?): String? = when (label) {
+        "REAL_EVENT" -> getString(R.string.event_label_real)
+        "POTHOLE" -> getString(R.string.event_label_pothole)
+        "PHONE_MOVED" -> getString(R.string.event_label_phone)
+        "FALSE_POSITIVE" -> getString(R.string.event_label_false)
+        else -> null
     }
 
     /** A koppintható sorok visszajelzése (a téma szerinti hullámeffekt). */
@@ -477,39 +728,6 @@ class TrackDetailActivity : AppCompatActivity() {
         revealMap()
     }
 
-    /** A limit feletti és a meredek szakaszok külön színnel a nyomvonalon. */
-    private fun drawAnalysisOverlays(analysis: TrackAnalysis) {
-        lastAnalysis = analysis
-        analysisOverlays.forEach { binding.map.overlays.remove(it) }
-        analysisOverlays.clear()
-
-        // Az indexek a szerveren tárolt pontsorrendre mutatnak: csak akkor
-        // rajzolunk, ha ugyanannyi pontunk van, mint amiből az elemzés készült.
-        if (analysis.pointCount != points.size) {
-            binding.map.invalidate()
-            return
-        }
-
-        fun overlay(section: AnalysisSection, @ColorRes colorRes: Int, width: Float) {
-            val from = section.from.coerceIn(0, points.lastIndex)
-            val to = section.to.coerceIn(from, points.lastIndex)
-            if (to - from < 1) return
-            for (path in DisplayTrackRepository.paths(displayLinks().subList(from, to))) {
-                val polyline = Polyline(binding.map).apply {
-                    outlinePaint.color = ContextCompat.getColor(this@TrackDetailActivity, colorRes)
-                    outlinePaint.strokeWidth = width
-                    setPoints(path)
-                }
-                analysisOverlays.add(polyline)
-                binding.map.overlays.add(polyline)
-            }
-        }
-
-        analysis.climbs.filter { it.steep }.forEach { overlay(it, R.color.climb, 14f) }
-        analysis.speeding.forEach { overlay(it, R.color.speeding, 8f) }
-        binding.map.invalidate()
-    }
-
     // --- műveletek -------------------------------------------------------------
 
     private fun exportGpx() {
@@ -546,6 +764,9 @@ class TrackDetailActivity : AppCompatActivity() {
                         // A szerveren is törlődjön; ha most nincs net, a jelzés kivár.
                         dao.addPendingDelete(PendingDelete(trackId))
                         dao.deleteTrack(trackId)
+                        java.io.File(filesDir, "telemetry_clips").listFiles()
+                            ?.filter { it.name.startsWith("track-$trackId-") }
+                            ?.forEach { it.delete() }
                     }
                     SyncManager.requestSync()
                     StatsWidgetRenderer.refresh(this@TrackDetailActivity)

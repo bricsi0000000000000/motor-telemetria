@@ -21,6 +21,8 @@ data class TrackingState(
     val pointCount: Int = 0,
     val lastFixTime: Long = 0L,
     val hasFix: Boolean = false,
+    val telemetryEnabled: Boolean = false,
+    val telemetryQuality: Float = 0f,
     /** Az utoljára lezárt túra azonosítója – a Stop után ezt tudja megnyitni a UI. */
     val lastFinishedTrackId: Long = 0L
 ) {

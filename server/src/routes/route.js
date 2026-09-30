@@ -28,7 +28,7 @@ routeRouter.post('/route/plan', async (req, res, next) => {
   try {
     const plan = await planRoute({
       waypoints: req.body?.waypoints,
-      style: ['CURVY', 'RATRUN'].includes(req.body?.style) ? req.body.style : 'FAST',
+      style: ['CURVY', 'COMFORT', 'RATRUN'].includes(req.body?.style) ? req.body.style : 'FAST',
       options: req.body?.options ?? {}
     })
     res.json(plan)

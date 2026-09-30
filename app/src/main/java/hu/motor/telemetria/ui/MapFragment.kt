@@ -39,6 +39,7 @@ import hu.motor.telemetria.data.PlaceType
 import hu.motor.telemetria.data.RoadPoint
 import hu.motor.telemetria.data.RoadPointKind
 import hu.motor.telemetria.databinding.FragmentMapBinding
+import hu.motor.telemetria.net.AreaRepository
 import hu.motor.telemetria.net.ObservedStopRepository
 import hu.motor.telemetria.net.DisplayTrackRepository
 import hu.motor.telemetria.service.PathBuffer
@@ -80,6 +81,12 @@ class MapFragment : Fragment() {
         /** A lámpás kereszteződésekből sok van: csak közelebbről rajzoljuk. */
         private const val SIGNALS_MIN_ZOOM = 15.0
 
+        /** A boltokból is sok van; távolról csak a vonal számít. */
+        private const val SHOPS_MIN_ZOOM = 13.0
+
+        /** A megrajzolt területek körvonala csak közelről, távolról elég a logó. */
+        private const val AREA_OUTLINE_MIN_ZOOM = 15.0
+
         /** Egyszerre ennyi útszakasznál többet nem rajzolunk ki. */
         private const val MAX_DRAWN_SEGMENTS = 1200
 
@@ -120,6 +127,9 @@ class MapFragment : Fragment() {
     /** A sebességhatár szerint színezett útszakaszok. */
     private val speedOverlays = mutableListOf<Polyline>()
 
+    /** A webes felületen megrajzolt területek: logó körben, közelről a körvonal is. */
+    private val areaOverlays = mutableListOf<org.osmdroid.views.overlay.Overlay>()
+
     private var roadPoints: List<RoadPoint> = emptyList()
     private var showLimits = false
 
@@ -130,6 +140,7 @@ class MapFragment : Fragment() {
     private val redrawRunnable = Runnable {
         drawRoadPoints()
         drawSpeedLimits()
+        drawAreas()
     }
 
     private var followMode = true
@@ -186,6 +197,7 @@ class MapFragment : Fragment() {
         observeState()
         observePlaces()
         observeRoadPoints()
+        loadAreas()
 
         showLimits = requireContext()
             .getSharedPreferences(UI_PREFS, android.content.Context.MODE_PRIVATE)
@@ -303,6 +315,70 @@ class MapFragment : Fragment() {
         }
     }
 
+    /**
+     * A megrajzolt területek: előbb a telefonon tárolt lista (net nélkül is),
+     * utána a friss a szerverről – az új logókkal együtt.
+     */
+    private fun loadAreas() {
+        viewLifecycleOwner.lifecycleScope.launch {
+            val context = requireContext().applicationContext
+            AreaRepository.loadCached(context)
+            drawAreas()
+            AreaRepository.refresh(context).onSuccess {
+                if (_binding == null) return@onSuccess
+                drawAreas()
+                // A megállások a friss területekkel kapják a nevüket és logójukat.
+                stopMarkers?.show(observedStops.toList())
+            }
+        }
+    }
+
+    private fun drawAreas() {
+        if (_binding == null) return
+        areaOverlays.forEach { binding.map.overlays.remove(it) }
+        areaOverlays.clear()
+
+        val zoom = binding.map.zoomLevelDouble
+        if (zoom < SHOPS_MIN_ZOOM) { binding.map.invalidate(); return }
+        val context = requireContext()
+
+        // A nagyobb kerül alulra, a kisebb fölé – a plázán belüli bolt logója így
+        // nem bújik a pláza alá. Ugyanaz a sorrend, mint a webes felületen.
+        for (area in AreaRepository.current().sortedByDescending { it.size }) {
+            // Közelről a körvonal is látszik, hogy tudd, meddig tart a terület.
+            if (zoom >= AREA_OUTLINE_MIN_ZOOM) {
+                val colour = ShopBadges.kindColour(area.kind)
+                val outline = org.osmdroid.views.overlay.Polygon(binding.map).apply {
+                    points = area.polygon.map { GeoPoint(it[0], it[1]) }
+                    outlinePaint.color = colour
+                    outlinePaint.strokeWidth = 2f * resources.displayMetrics.density
+                    fillPaint.color = (colour and 0x00FFFFFF) or 0x1F000000
+                    setOnClickListener { _, _, _ -> false }
+                    infoWindow = null
+                }
+                binding.map.overlays.add(outline)
+                areaOverlays.add(outline)
+            }
+            val icon = BitmapDrawable(resources, ShopBadges.areaDisc(context, area, 30f))
+            val bubble = bubbleIcon(icon, area.name, ShopBadges.kindColour(area.kind))
+            val marker = Marker(binding.map).apply {
+                position = GeoPoint(area.centerLat, area.centerLon)
+                setAnchor(icon.intrinsicWidth / 2f / bubble.intrinsicWidth, Marker.ANCHOR_CENTER)
+                this.icon = bubble
+                setInfoWindow(null)
+                setOnMarkerClickListener { _, _ ->
+                    Toast.makeText(context, area.name, Toast.LENGTH_SHORT).show()
+                    true
+                }
+            }
+            binding.map.overlays.add(marker)
+            areaOverlays.add(marker)
+        }
+
+        bringPositionMarkerToFront()
+        binding.map.invalidate()
+    }
+
     /** Mérők, rendőrök, balesetek, lámpák a térképen. */
     private fun drawRoadPoints() {
         if (_binding == null) return
@@ -314,15 +390,22 @@ class MapFragment : Fragment() {
         val now = System.currentTimeMillis()
 
         for (point in roadPoints) {
-            // A lámpákból sok van: csak közelebbről érdemes kirajzolni.
+            // A lámpákból és a boltokból sok van: csak közelebbről érdemes kirajzolni.
             if (point.pointKind == RoadPointKind.TRAFFIC_SIGNALS && zoom < SIGNALS_MIN_ZOOM) continue
+            if (point.pointKind == RoadPointKind.SHOP && zoom < SHOPS_MIN_ZOOM) continue
             if (point.expiresAt != null && point.expiresAt < now) continue
 
             // A lámpánál nem kell felirat (sok van, és magától értetődő),
             // minden másnál viszont látszódjon a lényeg koppintás nélkül.
+            val brand = if (point.pointKind == RoadPointKind.SHOP) ShopBadges[point.description] else null
             val label = if (point.pointKind == RoadPointKind.TRAFFIC_SIGNALS) null else shortLabel(point)
-            val icon = ContextCompat.getDrawable(requireContext(), iconFor(point)) ?: continue
-            val bubble = if (label == null) icon else bubbleIcon(icon, label, colourFor(point))
+            val icon = if (brand != null) {
+                BitmapDrawable(resources, ShopBadges.disc(requireContext(), brand, 26f))
+            } else {
+                ContextCompat.getDrawable(requireContext(), iconFor(point)) ?: continue
+            }
+            val outline = brand?.disc ?: ContextCompat.getColor(requireContext(), colourFor(point))
+            val bubble = if (label == null) icon else bubbleIcon(icon, label, outline)
 
             val marker = Marker(binding.map).apply {
                 position = GeoPoint(point.lat, point.lon)
@@ -363,6 +446,8 @@ class MapFragment : Fragment() {
         RoadPointKind.ACCIDENT -> getString(R.string.road_point_accident)
         RoadPointKind.OTHER -> point.description ?: getString(R.string.road_point_other)
         RoadPointKind.TRAFFIC_SIGNALS -> getString(R.string.road_point_signals)
+        RoadPointKind.SHOP -> point.road ?: ShopBadges[point.description]?.label
+            ?: getString(R.string.road_point_shop)
     }
 
     private fun colourFor(point: RoadPoint) = when (point.pointKind) {
@@ -370,6 +455,7 @@ class MapFragment : Fragment() {
         RoadPointKind.POLICE -> R.color.road_police
         RoadPointKind.ACCIDENT, RoadPointKind.OTHER -> R.color.road_accident
         RoadPointKind.TRAFFIC_SIGNALS -> R.color.road_signals
+        RoadPointKind.SHOP -> R.color.place_destination
     }
 
     /**
@@ -377,7 +463,7 @@ class MapFragment : Fragment() {
      * lényeg koppintás nélkül is olvasható, és nem kell az osmdroid saját
      * buborékablakait nyitogatni.
      */
-    private fun bubbleIcon(icon: Drawable, text: String, colourRes: Int): Drawable {
+    private fun bubbleIcon(icon: Drawable, text: String, colour: Int): Drawable {
         val density = resources.displayMetrics.density
         val padding = 5f * density
         val gap = 3f * density
@@ -392,7 +478,7 @@ class MapFragment : Fragment() {
             color = ContextCompat.getColor(requireContext(), R.color.surface)
         }
         val border = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-            color = ContextCompat.getColor(requireContext(), colourRes)
+            color = colour
             style = Paint.Style.STROKE
             strokeWidth = 1.5f * density
         }
@@ -428,6 +514,7 @@ class MapFragment : Fragment() {
         RoadPointKind.POLICE -> R.drawable.ic_road_police
         RoadPointKind.ACCIDENT, RoadPointKind.OTHER -> R.drawable.ic_road_accident
         RoadPointKind.TRAFFIC_SIGNALS -> R.drawable.ic_road_signals
+        RoadPointKind.SHOP -> R.drawable.ic_stop_shop
     }
 
     /** Az ideiglenes bejelentések a lejáratuk felé haladva halványodnak. */
@@ -446,6 +533,7 @@ class MapFragment : Fragment() {
                 RoadPointKind.POLICE -> R.string.road_point_police
                 RoadPointKind.ACCIDENT -> R.string.road_point_accident
                 RoadPointKind.TRAFFIC_SIGNALS -> R.string.road_point_signals
+                RoadPointKind.SHOP -> R.string.road_point_shop
                 RoadPointKind.OTHER -> R.string.road_point_other
             }
         )
@@ -503,6 +591,7 @@ class MapFragment : Fragment() {
         val lines = listOf(
             layerLine(meta, "cameras", R.string.road_layer_cameras, segments = false),
             layerLine(meta, "signals", R.string.road_layer_signals, segments = false),
+            layerLine(meta, "shops", R.string.road_layer_shops, segments = false),
             layerLine(meta, "speedlimits", R.string.road_layer_speedlimits, segments = true),
             wazeLine(meta)
         )
@@ -559,6 +648,7 @@ class MapFragment : Fragment() {
     }
 
     private fun refreshRoadData(view: DialogRoadLayersBinding, freeOnly: Boolean) {
+        loadAreas()
         viewLifecycleOwner.lifecycleScope.launch {
             RoadDataRepository.refresh(requireContext(), freeOnly)
                 .onSuccess { meta ->
@@ -785,7 +875,8 @@ class MapFragment : Fragment() {
                     val old = observedStops[index]
                     observedStops[index] = stop.copy(id = old.id, startedAt = minOf(old.startedAt, stop.startedAt),
                         type = if (stop.type == "OTHER") old.type else stop.type,
-                        name = stop.name ?: old.name)
+                        name = stop.name ?: old.name, brand = stop.brand ?: old.brand,
+                        areaId = stop.areaId ?: old.areaId, durationMs = stop.durationMs ?: old.durationMs)
                 } else observedStops.add(stop)
             }
             stopMarkers?.show(observedStops.toList())
@@ -1067,6 +1158,14 @@ class MapFragment : Fragment() {
             } else {
                 getString(R.string.gps_searching)
             }
+            if (state.telemetryEnabled) {
+                val sensor = when {
+                    state.telemetryQuality >= 0.65f -> getString(R.string.telemetry_live_ok)
+                    state.telemetryQuality > 0f -> getString(R.string.telemetry_live_calibrating)
+                    else -> getString(R.string.telemetry_live_waiting)
+                }
+                binding.tvGps.text = "${binding.tvGps.text} · $sensor"
+            }
         }
 
         binding.tvStatus.setText(
@@ -1145,6 +1244,7 @@ class MapFragment : Fragment() {
         displayGeneration++
         stopMarkers?.clear()
         stopMarkers = null
+        areaOverlays.clear()
         stopLoading = false
         displayMatchLoading = false
         matchedDisplayLinks.clear()

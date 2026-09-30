@@ -109,6 +109,66 @@
                 </LinearLayout>
             </com.google.android.material.card.MaterialCardView>
 
+            <!-- Telefon szenzorai -->
+            <com.google.android.material.card.MaterialCardView style="@style/StatsCard">
+
+                <LinearLayout style="@style/StatsCardContent">
+
+                    <TextView style="@style/StatsCardTitle" android:text="@string/telemetry_settings_title" />
+
+                    <com.google.android.material.materialswitch.MaterialSwitch
+                        android:id="@+id/switchTelemetry"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:text="@string/telemetry_switch" />
+
+                    <TextView
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="4dp"
+                        android:alpha="0.6"
+                        android:text="@string/telemetry_hint"
+                        android:textSize="12sp" />
+
+                    <TextView
+                        android:id="@+id/tvTelemetryCalibration"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="8dp"
+                        android:textSize="13sp" />
+
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="8dp"
+                        android:orientation="horizontal">
+
+                        <com.google.android.material.button.MaterialButton
+                            android:id="@+id/btnSensorInventory"
+                            style="@style/Widget.Material3.Button.OutlinedButton"
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_weight="1"
+                            android:text="@string/telemetry_inventory" />
+
+                        <com.google.android.material.button.MaterialButton
+                            android:id="@+id/btnResetCalibration"
+                            style="@style/Widget.Material3.Button.TextButton"
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_weight="1"
+                            android:text="@string/telemetry_recalibrate" />
+                    </LinearLayout>
+
+                    <com.google.android.material.button.MaterialButton
+                        android:id="@+id/btnManualMount"
+                        style="@style/Widget.Material3.Button.TextButton"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:text="@string/telemetry_manual_mount" />
+                </LinearLayout>
+            </com.google.android.material.card.MaterialCardView>
+
             <!-- Szerver -->
             <com.google.android.material.card.MaterialCardView style="@style/StatsCard">
 

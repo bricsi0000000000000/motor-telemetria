@@ -9,10 +9,11 @@ import androidx.room.Query
 import kotlinx.coroutines.flow.Flow
 
 /** Egy útmenti elem típusa. A sorrend a fontosságot is jelenti. */
-enum class RoadPointKind { SPEED_CAMERA, POLICE, ACCIDENT, TRAFFIC_SIGNALS, OTHER }
+enum class RoadPointKind { SPEED_CAMERA, POLICE, ACCIDENT, TRAFFIC_SIGNALS, SHOP, OTHER }
 
 /**
- * Fix sebességmérő, rendőri kitelepülés, baleset vagy lámpás kereszteződés.
+ * Fix sebességmérő, rendőri kitelepülés, baleset, lámpás kereszteződés vagy
+ * jelölt bolt (a láncot a `description` mezőben kapjuk).
  *
  * A szerverről érkezik, és itt is eltároljuk, hogy net nélkül is látszódjon a
  * legutóbb lehívott állapot.

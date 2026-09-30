@@ -57,7 +57,7 @@ interface TrackDao {
         """UPDATE tracks SET endTime = :endTime, distanceMeters = :distanceMeters,
            durationMillis = :durationMillis, movingMillis = :movingMillis,
            maxSpeedMps = :maxSpeedMps, elevationGainMeters = :elevationGainMeters,
-           pointCount = :pointCount, dirty = 1
+           pointCount = :pointCount, telemetrySampleCount = :telemetrySampleCount, dirty = 1
            WHERE id = :id"""
     )
     suspend fun updateSummary(
@@ -68,7 +68,8 @@ interface TrackDao {
         movingMillis: Long,
         maxSpeedMps: Float,
         elevationGainMeters: Double,
-        pointCount: Int
+        pointCount: Int,
+        telemetrySampleCount: Int
     )
 
     @Query("DELETE FROM tracks WHERE id = :id")
@@ -83,6 +84,18 @@ interface TrackDao {
 
     @Insert
     suspend fun insertPoints(points: List<TrackPoint>)
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertTelemetry(sample: TelemetrySample)
+
+    @Query("SELECT * FROM telemetry_samples WHERE trackId = :trackId ORDER BY seq ASC")
+    suspend fun getTelemetry(trackId: Long): List<TelemetrySample>
+
+    @Query("SELECT COUNT(*) FROM telemetry_samples WHERE trackId = :trackId")
+    suspend fun countTelemetry(trackId: Long): Int
+
+    @Query("UPDATE tracks SET telemetryVersion = 1, dirty = 1 WHERE id = :trackId")
+    suspend fun markTelemetryEnabled(trackId: Long)
 
     @Query("SELECT * FROM track_points WHERE trackId = :trackId ORDER BY time ASC")
     suspend fun getPoints(trackId: Long): List<TrackPoint>
@@ -114,6 +127,7 @@ interface TrackDao {
         """SELECT * FROM tracks
            WHERE dirty = 1
               OR syncedPoints < (SELECT COUNT(*) FROM track_points WHERE trackId = tracks.id)
+              OR syncedTelemetrySamples < (SELECT COUNT(*) FROM telemetry_samples WHERE trackId = tracks.id)
            ORDER BY startTime ASC"""
     )
     suspend fun getPendingTracks(): List<Track>
@@ -121,7 +135,8 @@ interface TrackDao {
     @Query(
         """SELECT COUNT(*) FROM tracks
            WHERE dirty = 1
-              OR syncedPoints < (SELECT COUNT(*) FROM track_points WHERE trackId = tracks.id)"""
+              OR syncedPoints < (SELECT COUNT(*) FROM track_points WHERE trackId = tracks.id)
+              OR syncedTelemetrySamples < (SELECT COUNT(*) FROM telemetry_samples WHERE trackId = tracks.id)"""
     )
     suspend fun countPendingTracks(): Int
 
@@ -129,8 +144,19 @@ interface TrackDao {
     @Query("SELECT * FROM track_points WHERE trackId = :trackId ORDER BY id ASC LIMIT :limit OFFSET :offset")
     suspend fun getPointsFrom(trackId: Long, offset: Int, limit: Int): List<TrackPoint>
 
-    @Query("UPDATE tracks SET remoteId = :remoteId, syncedPoints = :syncedPoints WHERE id = :id")
-    suspend fun markUploaded(id: Long, remoteId: Long?, syncedPoints: Int)
+    @Query("SELECT * FROM telemetry_samples WHERE trackId = :trackId ORDER BY seq ASC LIMIT :limit OFFSET :offset")
+    suspend fun getTelemetryFrom(trackId: Long, offset: Int, limit: Int): List<TelemetrySample>
+
+    @Query(
+        """UPDATE tracks SET remoteId = :remoteId, syncedPoints = :syncedPoints,
+           syncedTelemetrySamples = :syncedTelemetrySamples WHERE id = :id"""
+    )
+    suspend fun markUploaded(
+        id: Long,
+        remoteId: Long?,
+        syncedPoints: Int,
+        syncedTelemetrySamples: Int
+    )
 
     /**
      * A "kész" jelzést csak akkor tesszük ki, ha az összesítő azóta sem változott:

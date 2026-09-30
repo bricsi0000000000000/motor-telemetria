@@ -76,14 +76,14 @@ function mode(values) {
   return best
 }
 
-export async function analyzeTrack(track, points) {
+export async function analyzeTrack(track, points, telemetry = [], telemetryProfile = {}) {
   if (points.length < 5) {
     return {
       trackId: track.id,
       computedAt: Date.now(),
       pointCount: points.length,
       summary: null,
-      sections: { fast: [], slow: [], climbs: [], descents: [], speeding: [] },
+      sections: { fast: [], slow: [], climbs: [], descents: [], speeding: [], braking: [], acceleration: [], roughness: [], incidents: [] },
       note: 'Túl kevés pont az elemzéshez.'
     }
   }
@@ -121,6 +121,7 @@ export async function analyzeTrack(track, points) {
   }
   const avgMovingKmh = movingMs > 0 ? (distanceM / (movingMs / 1000)) * KMH : 0
   const maxKmh = Math.max(...rawSpeed) * KMH
+  const telemetryAnalysis = analyzeTelemetry(points, telemetry, telemetryProfile)
 
   // --- sebességhatárok ------------------------------------------------------
   let limitData = { limits: new Array(n).fill(null), names: new Array(n).fill(null), coverage: 0, source: null }
@@ -300,6 +301,7 @@ export async function analyzeTrack(track, points) {
     fastestSection: fast[0] ?? null,
     fastSectionCount: fast.length,
     slowSectionCount: slow.length,
+    telemetry: telemetryAnalysis.summary,
     limit: {
       coverage: limitData.coverage,
       source: limitData.source,
@@ -326,7 +328,101 @@ export async function analyzeTrack(track, points) {
       slow: slow.slice(0, 5),
       climbs: climbs.slice(0, 5),
       descents: descents.slice(0, 5),
-      speeding: speeding.slice(0, 8)
+      speeding: speeding.slice(0, 8),
+      braking: telemetryAnalysis.braking,
+      acceleration: telemetryAnalysis.acceleration,
+      roughness: telemetryAnalysis.roughness,
+      incidents: telemetryAnalysis.incidents
     }
+  }
+}
+
+export function analyzeTelemetry(points, samples, profile = { eligible: true }) {
+  const valid = samples.filter((sample) => sample.mountQuality >= 0.65)
+  const nearestPoint = (time) => {
+    let best = 0
+    let distance = Infinity
+    for (let i = 0; i < points.length; i++) {
+      const candidate = Math.abs(points[i].time - time)
+      if (candidate < distance) { distance = candidate; best = i }
+    }
+    return best
+  }
+  const section = (sample, type, value) => {
+    const index = nearestPoint(sample.time)
+    return {
+      type, from: index, to: Math.min(points.length - 1, index + 1),
+      startTime: sample.time, endTime: sample.time + 1000, durationMillis: 1000,
+      distanceMeters: sample.speedMps, avgKmh: sample.speedMps * 3.6,
+      maxKmh: sample.speedMps * 3.6, elevationDeltaMeters: 0, gradePercent: 0,
+      limitKmh: null, road: null, lat: sample.lat ?? points[index]?.lat ?? 0,
+      lon: sample.lon ?? points[index]?.lon ?? 0, telemetryValue: value,
+      mountQuality: sample.mountQuality, steep: false
+    }
+  }
+  const top = (predicate, score, type, count = 8) => valid.filter(predicate)
+    .sort((a, b) => score(b) - score(a)).slice(0, count)
+    .map((sample) => section(sample, type, score(sample)))
+
+  const eligible = profile.eligible !== false
+  const accelerationThreshold = Math.max(3, profile.accelerationThreshold ?? 3)
+  const brakingThreshold = Math.max(3, profile.brakingThreshold ?? 3)
+  const incidentSamples = []
+  for (let index = 0; index < valid.length; index++) {
+    const sample = valid[index]
+    if ((sample.flags & 32) === 0) continue
+    const before = valid.slice(Math.max(0, index - 3), index + 1)
+    const after = valid.slice(index + 1, index + 11)
+    const priorSpeed = Math.max(sample.speedMps ?? 0, ...before.map((item) => item.speedMps ?? 0))
+    const laterSpeed = after.length ? Math.min(...after.map((item) => item.speedMps ?? 0)) : priorSpeed
+    const suddenLoss = priorSpeed - laterSpeed >= 5
+    const stillSeconds = after.filter((item) => (item.speedMps ?? 0) < 1 &&
+      (item.verticalRmsMps2 ?? 0) < 0.8 && (item.yawPeakRadS ?? 0) < 0.3).length
+    const impact = (sample.verticalPeakMps2 ?? 0) > 20
+    const rotation = Math.max(sample.yawPeakRadS ?? 0, sample.rollPeakRadS ?? 0) > 3.5
+    if ((impact && rotation) || ((impact || rotation) && suddenLoss && stillSeconds >= 3)) {
+      incidentSamples.push(sample)
+    }
+  }
+
+  let elevationGain = 0
+  let altitudeRef = null
+  for (const sample of valid) {
+    if (!Number.isFinite(sample.fusedAltitudeMeters)) continue
+    if (altitudeRef === null) altitudeRef = sample.fusedAltitudeMeters
+    else if (sample.fusedAltitudeMeters - altitudeRef >= 1.5) {
+      elevationGain += sample.fusedAltitudeMeters - altitudeRef
+      altitudeRef = sample.fusedAltitudeMeters
+    } else if (sample.fusedAltitudeMeters < altitudeRef) altitudeRef = sample.fusedAltitudeMeters
+  }
+  return {
+    summary: samples.length === 0 ? null : {
+      sampleCount: samples.length,
+      validSampleCount: valid.length,
+      qualityCoverage: valid.length / samples.length,
+      maxAccelerationMps2: valid.reduce((max, s) => Math.max(max, s.forwardMaxMps2), 0),
+      maxBrakingMps2: valid.reduce((max, s) => Math.max(max, -s.forwardMinMps2), 0),
+      maxLeanDegrees: valid.reduce((max, s) => Math.max(max, Math.abs(s.leanDegrees ?? 0)), 0),
+      maxVerticalPeakMps2: valid.reduce((max, s) => Math.max(max, s.verticalPeakMps2), 0),
+      fusedElevationGainMeters: elevationGain,
+      roughEventCount: valid.filter((s) => (s.flags & 16) !== 0).length,
+      incidentCandidateCount: incidentSamples.length,
+      personalizationEligible: eligible,
+      accelerationThresholdMps2: accelerationThreshold,
+      brakingThresholdMps2: brakingThreshold
+    },
+    braking: eligible
+      ? top((s) => s.forwardMinMps2 < -brakingThreshold, (s) => -s.forwardMinMps2, 'BRAKING', 5)
+      : [],
+    acceleration: eligible
+      ? top((s) => s.forwardMaxMps2 > accelerationThreshold, (s) => s.forwardMaxMps2, 'ACCELERATION', 5)
+      : [],
+    roughness: top((s) => (s.flags & 16) !== 0, (s) => s.verticalPeakMps2, 'ROUGHNESS', 8),
+    incidents: incidentSamples
+      .sort((a, b) => Math.max(b.verticalPeakMps2 ?? 0, (b.yawPeakRadS ?? 0) * 5) -
+        Math.max(a.verticalPeakMps2 ?? 0, (a.yawPeakRadS ?? 0) * 5))
+      .slice(0, 8)
+      .map((sample) => section(sample, 'INCIDENT',
+        Math.max(sample.verticalPeakMps2 ?? 0, (sample.yawPeakRadS ?? 0) * 5)))
   }
 }

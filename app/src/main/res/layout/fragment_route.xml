@@ -119,6 +119,13 @@
                     android:layout_weight="1"
                     android:text="@string/route_style_curvy" />
                 <com.google.android.material.button.MaterialButton
+                    android:id="@+id/btnStyleComfort"
+                    style="?attr/materialButtonOutlinedStyle"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:text="@string/route_style_comfort" />
+                <com.google.android.material.button.MaterialButton
                     android:id="@+id/btnStyleRatRun"
                     style="?attr/materialButtonOutlinedStyle"
                     android:layout_width="0dp"

@@ -32,6 +32,7 @@
     <string name="label_moving_time">Mozgásban</string>
     <string name="label_avg_speed">Átlag</string>
     <string name="label_max_speed">Max</string>
+    <string name="speed_section_min_max">min %1$d · max %2$d km/h</string>
     <string name="label_altitude">Magasság</string>
     <string name="label_elevation_gain">Emelkedő</string>
 
@@ -206,6 +207,7 @@
     <string name="road_data_title">Útmenti adatok</string>
     <string name="road_layer_cameras">Fix sebességmérők</string>
     <string name="road_layer_signals">Lámpás kereszteződések</string>
+    <string name="road_layer_shops">Boltok</string>
     <string name="road_layer_speedlimits">Sebességhatárok</string>
     <string name="road_layer_waze">Rendőrök, balesetek</string>
     <string name="road_layer_line">%1$s: %2$s · %3$s</string>
@@ -232,6 +234,7 @@
     <string name="road_point_police">Rendőri kitelepülés</string>
     <string name="road_point_accident">Baleset</string>
     <string name="road_point_signals">Lámpás kereszteződés</string>
+    <string name="road_point_shop">Bolt</string>
     <string name="road_point_other">Egyéb bejelentés</string>
     <string name="road_point_limit">%1$s · %2$d km/h</string>
     <string name="segment_info">%1$d km/h (%2$s)%3$s</string>
@@ -271,7 +274,7 @@
     <string name="section_slow">Lassú szakasz</string>
 
     <string name="section_detail_limit">csúcs %1$s · limit %2$d km/h · %3$s</string>
-    <string name="section_detail_speed">%1$s · %2$s · limit %3$s</string>
+    <string name="section_detail_speed">%1$s · %2$s</string>
     <string name="section_detail_grade">%1$s meredekség · %2$s · %3$s</string>
     <string name="section_detail_slow">%1$s alatt %2$s</string>
 
@@ -293,6 +296,9 @@
     <string name="route_remove_point">Pont törlése</string>
     <string name="route_style_fast">Gyors</string>
     <string name="route_style_curvy">Kanyargós</string>
+    <string name="route_style_comfort">Kímélő</string>
+    <string name="route_comfort_coverage">Útminőségi lefedettség: %1$d%%</string>
+    <string name="route_comfort_no_data">Még nincs három áthaladásból igazolt útminőség; a leggyorsabb jelölt maradt.</string>
     <string name="route_plan_action">Útvonal tervezése</string>
     <string name="route_planning">Tervezés…</string>
     <string name="route_need_two">Legalább két pont kell.</string>
@@ -324,4 +330,42 @@
     <string name="corner_gentle_name">Enyhe</string>
     <string name="corner_straight_name">Egyenes</string>
     <string name="route_corner_row">%1$s · %2$d db · %3$s</string>
+    <string name="telemetry_settings_title">Telefon szenzorai</string>
+    <string name="telemetry_switch">Bővített telemetria</string>
+    <string name="telemetry_hint">50 Hz-es gyorsulás- és forgásmérés, barometrikus magasság, úthibák és eseményjelöltek. Csak aktív mérés közben fut.</string>
+    <string name="telemetry_inventory">Szenzorleltár</string>
+    <string name="telemetry_recalibrate">Újrakalibrálás</string>
+    <string name="telemetry_calibrating">Tartókalibráció: %1$d%% – egyenes, 20 km/h feletti haladás kell.</string>
+    <string name="telemetry_calibrated">Tartókalibráció kész.</string>
+    <string name="telemetry_inventory_title">Elérhető szenzorok</string>
+    <string name="telemetry_reset_done">A kalibráció a következő túrán újra felépül.</string>
+    <string name="telemetry_manual_mount">Kézi tartóirány</string>
+    <string name="telemetry_manual_mount_title">Melyik telefonél néz menetirányba?</string>
+    <string-array name="telemetry_manual_mount_choices">
+        <item>Automatikus (ajánlott)</item>
+        <item>Felső él</item>
+        <item>Jobb él</item>
+        <item>Alsó él</item>
+        <item>Bal él</item>
+    </string-array>
+    <string name="analysis_telemetry_summary">Szenzor: %1$d jó minta (%2$s) · gyorsítás %3$.1f m/s² · fékezés %4$.1f m/s²</string>
+    <string name="analysis_telemetry_detail">Becsült max. dőlés %1$.0f° · barometrikus emelkedés %2$s · úthiba %3$d · eseményjelölt %4$d</string>
+    <string name="analysis_group_braking">Erős fékezések</string>
+    <string name="analysis_group_acceleration">Erős gyorsítások</string>
+    <string name="analysis_group_roughness">Úthibák és erős ütések</string>
+    <string name="analysis_group_incidents">Árnyék módú eseményjelöltek</string>
+    <string name="analysis_telemetry_event_detail">%1$s · %2$s · tartóminőség %3$s</string>
+    <string name="telemetry_chart_title">Szenzoros menetprofil</string>
+    <string name="telemetry_chart_description">Kék: fuzionált magasság, narancs: hosszirányú gyorsulás, lila pont: eseményjelölt.</string>
+    <string name="telemetry_live_ok">szenzor rendben</string>
+    <string name="telemetry_live_calibrating">szenzor kalibrálás</string>
+    <string name="telemetry_live_waiting">szenzorra vár</string>
+    <string name="analysis_telemetry_learning">A kemény gyorsítás/fékezés még tanulási fázisban van (5 túra vagy 100 km kell).</string>
+    <string name="event_label_title">Mi történt? (hosszan megnyomott esemény)</string>
+    <string name="event_label_real">Valódi esemény</string>
+    <string name="event_label_pothole">Kátyú / úthiba</string>
+    <string name="event_label_phone">Telefon mozgatása</string>
+    <string name="event_label_false">Téves felismerés</string>
+    <string name="event_label_error">A címke nem menthető: %1$s</string>
+    <string name="event_label_hold_hint">hosszan nyomva címkézhető</string>
 </resources>

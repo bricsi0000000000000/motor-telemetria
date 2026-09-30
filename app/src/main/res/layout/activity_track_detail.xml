@@ -66,6 +66,12 @@
                     android:layout_height="wrap_content"
                     android:text="Motorozás útra illesztve; séta, megállás és bizonytalan részek eredeti GPS szerint."
                     android:textAppearance="?attr/textAppearanceBodySmall" />
+                <TextView
+                    android:id="@+id/tvSpeedLegend"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="4dp"
+                    android:textSize="11sp" />
 
                 <LinearLayout
                     android:layout_width="match_parent"
@@ -138,6 +144,21 @@
                         app:icon="@drawable/ic_delete"
                         app:iconGravity="textStart" />
                 </LinearLayout>
+
+                <TextView
+                    android:id="@+id/tvTelemetryChartTitle"
+                    style="@style/StatsCardTitle"
+                    android:layout_marginTop="16dp"
+                    android:text="@string/telemetry_chart_title"
+                    android:visibility="gone" />
+
+                <hu.motor.telemetria.ui.TelemetryChartView
+                    android:id="@+id/telemetryChart"
+                    android:layout_width="match_parent"
+                    android:layout_height="150dp"
+                    android:layout_marginTop="4dp"
+                    android:contentDescription="@string/telemetry_chart_description"
+                    android:visibility="gone" />
 
                 <!-- Elemzés: szakaszok és a helyi sebességhatárhoz mért összevetés -->
                 <LinearLayout

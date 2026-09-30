@@ -110,7 +110,12 @@ class RouteFragment : Fragment() {
         drawWaypointMarkers()
         loadFamiliarRoutes()
         savedInstanceState?.getString("route_style")?.let { style ->
-            binding.styleGroup.check(when (style) { "FAST" -> R.id.btnStyleFast; "CURVY" -> R.id.btnStyleCurvy; else -> R.id.btnStyleRatRun })
+            binding.styleGroup.check(when (style) {
+                "CURVY" -> R.id.btnStyleCurvy
+                "COMFORT" -> R.id.btnStyleComfort
+                "RATRUN" -> R.id.btnStyleRatRun
+                else -> R.id.btnStyleFast
+            })
         }
         if (previousPlan != null) showPlan(previousPlan)
         loadPlaceChips()
@@ -436,6 +441,7 @@ class RouteFragment : Fragment() {
 
         val style = when (binding.styleGroup.checkedButtonId) {
             R.id.btnStyleCurvy -> "CURVY"
+            R.id.btnStyleComfort -> "COMFORT"
             R.id.btnStyleRatRun -> "RATRUN"
             else -> "FAST"
         }
@@ -543,10 +549,17 @@ class RouteFragment : Fragment() {
         bindTime(binding.timeSlowest, R.string.route_slowest,
             result.times.totalSlowest, result.times.movingSlowest, result.times.stopsSlowest)
 
-        val avoidance = JSONObject(result.raw).optJSONObject("avoidance")
-        binding.tvConfidence.text = result.confidence.reason + if (avoidance != null) {
-            "\n${avoidance.optInt("trafficLights")} ismert lámpa · ${avoidance.optInt("leftTurns")} balra kanyar"
-        } else ""
+        val raw = JSONObject(result.raw)
+        val details = mutableListOf(result.confidence.reason)
+        raw.optJSONObject("avoidance")?.let { avoidance ->
+            details += "${avoidance.optInt("trafficLights")} ismert lámpa · ${avoidance.optInt("leftTurns")} balra kanyar"
+        }
+        raw.optJSONObject("comfort")?.let { comfort ->
+            val coverage = (comfort.optDouble("coverage") * 100).toInt()
+            details += if (coverage > 0) getString(R.string.route_comfort_coverage, coverage)
+            else getString(R.string.route_comfort_no_data)
+        }
+        binding.tvConfidence.text = details.joinToString("\n")
         if (result.warnings.isEmpty()) {
             binding.tvWarnings.visibility = View.GONE
         } else {
@@ -855,7 +868,12 @@ class RouteFragment : Fragment() {
 
         clearPlan()
         binding.styleGroup.check(
-            when (route.style) { "CURVY" -> R.id.btnStyleCurvy; "RATRUN" -> R.id.btnStyleRatRun; else -> R.id.btnStyleFast }
+            when (route.style) {
+                "CURVY" -> R.id.btnStyleCurvy
+                "COMFORT" -> R.id.btnStyleComfort
+                "RATRUN" -> R.id.btnStyleRatRun
+                else -> R.id.btnStyleFast
+            }
         )
         route.planJson?.let {
             binding.arriveSameSide.isChecked = runCatching { JSONObject(it).optJSONObject("options")?.optBoolean("arriveSameSide", true) ?: true }.getOrDefault(true)
@@ -885,7 +903,10 @@ class RouteFragment : Fragment() {
         outState.putString("commute_ends", JSONArray().apply { commuteEnds.forEach { put(it.toJson()) } }.toString())
         outState.putBoolean("same_side", sameSide)
         outState.putString("route_style", when (binding.styleGroup.checkedButtonId) {
-            R.id.btnStyleFast -> "FAST"; R.id.btnStyleCurvy -> "CURVY"; else -> "RATRUN"
+            R.id.btnStyleFast -> "FAST"
+            R.id.btnStyleCurvy -> "CURVY"
+            R.id.btnStyleComfort -> "COMFORT"
+            else -> "RATRUN"
         })
     }
 

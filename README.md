@@ -117,6 +117,40 @@ Néhány dolog, ami nélkül a GPS-adat használhatatlan lenne:
 - A túra összesítője 20 másodpercenként kimentődik, és ha a rendszer elölné a
   folyamatot, az alkalmazás a mentett pontokból folytatja a mérést.
 
+## Szenzortelemetria és a kielemzett út színei
+
+A **Beállítások → Telefon szenzorai → Bővített telemetria** kapcsoló aktív
+méréskor 50 Hz-en gyűjti a gyorsulást, a giroszkópot és a forgásvektort, a
+barométert pedig 5 Hz-en. Tartósan csak másodperces összesítők maradnak meg;
+erős eseménynél egy tömörített 10 másodperces előzmény + 20 másodperces
+utózményklip készül. Szünetben és leállítva a szenzorok ki vannak kapcsolva.
+
+A tartó automatikusan kalibrálódik legalább 20 másodpercnyi, 20 km/h feletti,
+egyenes haladásból. A profil telefonmodell, képernyőirány és a Flip hinge-állapota
+szerint külön tárolódik. Ha ez nem sikerül, a négy telefonél közül kézzel is
+kijelölhető a menetirány. A gyenge vagy elmozdult tartó adata megmarad, de nem
+tanítja a személyes modellt és nem kerül a stabil útminőségbe.
+
+A túrarészlet nyomvonala a pontonkénti sebességet mutatja:
+
+| Sebesség | Szín |
+|---:|---|
+| 0 km/h | fekete |
+| 1–10 km/h | zöld |
+| 11–30 km/h | sárga |
+| 31–50 km/h | narancs |
+| 51–69 km/h | világoskék |
+| 70–90 km/h | sötétkék |
+| 91–120 km/h | rózsaszín |
+| 120 km/h fölött | lila |
+
+A szerver a jó minőségű mintákból barometrikus szintprofilt, gyorsításokat,
+fékezéseket, becsült dőlést és úthibákat számol. Stabil útminőség csak három
+külön áthaladás után keletkezik, irányonként és 50 km/h-ra normalizálva. Ezt
+használja a **Kímélő** útvonalstílus is az idő és a kanyargósság mellett. A
+balesetgyanú egyelőre kizárólag árnyék mód: nincs automatikus hívás vagy riasztás;
+a túra után a jelölt hosszan megnyomva címkézhető.
+
 ## Túranapló
 
 A lista naponként csoportosít, és minden nap kap egy **összefoglaló fejlécet**
@@ -172,6 +206,7 @@ A Térkép fülön két új gomb:
 |---|---|---|
 | Fix sebességmérők | OSM (`highway=speed_camera`, `enforcement=maxspeed`) | piros kamera, a limit a koppintásnál |
 | Lámpás kereszteződések | OSM (`highway=traffic_signals`, átkelők nélkül) | kis lámpa, csak 15-ös nagyítás fölött |
+| Boltok | OSM (`shop`, a jelölt láncokra szűrve) | kör alakú, márkaszínű jelölő a bolt nevével, 13-as nagyítás fölött |
 | Rendőrök, balesetek | wazeapi.com (havi 100 hívás) | jelvény / háromszög, 3 óráig, halványodva |
 | Sebességhatárok | OSM (`maxspeed` vagy úttípus szerinti alapérték) | színezett utak, 14-es nagyítás fölött |
 
@@ -179,6 +214,12 @@ A mérők, rendőrök és balesetek mellett **koppintás nélkül is látszik a 
 egy kis buborékban (mérőnél a limit, rendőrnél hogy hány perce jelentették); a
 teljes leírás koppintásra jön. A lámpás kereszteződéseknél nincs buborék –
 azokból sok van, és a három lámpás ikon magáért beszél.
+
+A **boltréteg** végig látszik a térképen, nem csak ott, ahol megálltál: a
+jelölt láncok (lásd a *Megállásikonok* szakaszt) ugyanazt a kör alakú,
+márkaszínű jelölőt kapják, mellette a bolt nevével. A réteg a mérőkkel és a
+lámpákkal együtt frissül, és ugyanabból a listából dolgozik, mint a
+megállások besorolása – így a két nézet ugyanarra a boltra soha nem mond mást.
 
 A sebességhatár-réteg színei: ≤30 türkiz, 50 zöld, 70 sárga, 90 narancs, 100+ piros.
 A **kiírt** limit folytonos vonal, az **úttípusból becsült** szaggatott. Egy
@@ -367,6 +408,65 @@ launchctl kickstart -k gui/$(id -u)/com.motortelemetria.server # újraindítás
 
 Az agent leírója: `~/Library/LaunchAgents/com.motortelemetria.server.plist`,
 naplója: `~/Library/Logs/motor-telemetria.log`.
+
+## Területek (webes felület)
+
+A szerver a **8789-es porton** (`http://localhost:8789/`, vagy más gépről
+`http://<szerver>:8789/`, Tailscale-en a gép MagicDNS-nevével) egy webes
+felületet ad, ahol **te döntöd el**, mi hol van. A szerverrel együtt indul
+(launchd, bejelentkezéskor), külön szolgáltatás nem kell hozzá. A telefon továbbra is a 8787-et használja; ugyanaz a szerver fut
+mindkettőn. A külön port azért kell, mert a 8787-et ezen a gépen a KorteDrive
+is foglalja a 127.0.0.1-en, így böngészőből a localhost:8787 oda jutna. A
+`WEB_PORT` környezeti változóval más port adható, `WEB_PORT=0` kikapcsolja. Az első megnyitáskor a szerver tokenjét kéri
+(ugyanaz, mint az appban); csak az adott böngészőben tárolódik.
+
+- **Új terület**: kattintással teszed le a **sokszög** csúcsait, akárhányat;
+  az első pontra kattintva vagy Enterrel kész, Backspace visszavon, Esc
+  megszakít. Utólag a csúcsok húzhatók, az oldalak közepén lévő „+" új
+  csúcsot szúr be, jobb klikk töröl egyet. Az „Alak újrarajzolása" a nevet
+  és a logót megtartja.
+- **Címke**: név, típus (bolt, tankolás, más hely, parkolás, lámpa,
+  forgalom) és megjegyzés.
+- **Logó**: PNG, JPEG, WebP, SVG vagy GIF. A böngésző 256×256-os PNG-vé
+  alakítja; a háttérszín és a méret állítható, az előnézet **pontosan úgy
+  mutatja körben, ahogy a telefon rajzolja**.
+
+A területek **közösek**, egyik túrához sincsenek kötve: minden megállásra
+érvényesek, a régiekre és az újakra is. A felület túrákat nem mutat.
+
+**Boltokban és más gyalog bejárt helyeken** (típus: bolt, más hely,
+tankolás, parkolás) nem a megállásokat számoljuk, hanem azt, **mikor lépsz be
+a területre és mikor ki**. A bent töltött szakaszokat területenként összeadjuk,
+és egy úton ez az egyetlen adat, ami a területhez megjelenik – akárhányszor
+álltál meg, sétáltál vagy mentél ki és vissza közben. Ha egy területen belül
+egy másikat is megrajzoltál (Aldi az ETO Parkon belül), a belsőbe átmenni
+kilépés a külsőből: az ETO Park ideje az Aldiban töltött időt nem tartalmazza.
+A sebesség nem számít. Ha épületben elmegy a GPS, vagy a felvétel szünetel,
+a legutóbb látott területen számol tovább, amíg egy új pont mást nem mutat; a
+40 méternél pontatlanabb pontok nem döntenek. Egy terület akkor jelenik meg,
+ha összesen legalább fél percet voltál bent, és közben legalább egyszer álltál
+– az áthajtás nem látogatás. A lámpa és forgalom típusú területeken a
+megállások maradnak, csak a terület nevét kapják.
+
+A megrajzolt terület **mindent felülír**: a beleeső megállás a terület nevét,
+típusát és logóját kapja, akkor is, ha egy másodperces, és akkor is, ha az
+OSM mást mondana. Ha több terület is tartalmaz egy pontot, a legkisebb nyer
+(a plázán belüli bolt). A telefon a listát és a logókat eltárolja, így net
+nélkül is kirajzolja őket: a térképen a logó körben, mellette a névvel,
+15-ös nagyítás fölött a körvonallal együtt.
+
+| Végpont | Mit csinál |
+| --- | --- |
+| `GET /api/areas` | a területek listája, logó nélkül (`hasLogo`, `logoAt`, `center`) |
+| `POST /api/areas` | új terület: `{ name, kind, note, polygon: [[lat,lon], …] }` |
+| `PUT /api/areas/:id` | módosítás (bármelyik mező) |
+| `DELETE /api/areas/:id` | törlés |
+| `PUT /api/areas/:id/logo` | logó feltöltése nyers bájtként (`image/png`, `jpeg`, `webp`; max. 512 KB) |
+| `GET /api/areas/:id/logo` | a logó; a `?v=<logoAt>` miatt sosem ragad be a régi |
+| `DELETE /api/areas/:id/logo` | logó törlése |
+
+A logók a szerver adatbázisában (`map_areas`) vannak, így a mentéssel együtt
+mentődnek.
 
 ## Útvonaltervezés
 
@@ -703,20 +803,59 @@ telefonon tárolódnak.
 
 ### Megállásikonok
 
-Az élő térkép és a túra részletei megjelölik a legalább 15 másodperces,
-helyben maradással járó lassú szakaszokat. Az úton/lámpánál várakozás,
-bevásárlás, tankolás, parkolás és más hely felkeresése külön ikont kap.
-A típus a megállás időtartama, GPS-pontossága, közúttól mért távolsága és
-az OpenStreetMap közeli helyei alapján **becslés**. Egy bolt közelsége
-önmagában nem jelenti, hogy vásároltál: bizonytalan helyzetben általános
-megállás marad. Egy közeli lámpa sem bizonyítja, hogy piros volt.
+Az élő térkép és a túra részletei minden megállást megjelölnek, **egy
+másodperctől** fölfelé. Megállásnak az számít, amikor a sebesség 0,8 m/s alá
+esik: a hosszát csak az álló pontokra mérjük, így az araszolás nem növeli.
+Minden jelölő alatt egy **kis lebegő kártya** mutatja a megállás hosszát
+("8 mp", "05:03", "1:05:03"), koppintás nélkül is.
 
-Az ikonra koppintva megjelenik az időtartam és a besorolás oka; a
-**Típus javítása** választással a helyes kategória eltárolható a telefonon,
-az automatikus besorolás pedig visszaállítható. Internet nélkül is vannak
-általános megállásjelölők. A helyazonosítás a `POST /api/track/stops`
-végponton fut; az OSM-helyeket hét napig gyorsítótárazzuk. Ehhez a szerver
-az érintett megállók környezetét lekérdezi az Overpass szolgáltatástól.
+Az úton állásnak két oka lehet, és a besorolás ezt szét is választja:
+**lámpánál állás**, ha 30 méteren belül ismert jelzőlámpa van, egyébként
+**forgalomban állás**. A lámpák és az úthálózat is a már letöltött rétegekből
+jön, így a döntés hálózati kérés nélkül is megvan.
+
+Az úttól elhúzódó, legalább egy perces megállásnál keressük a közeli boltot.
+Csak ezeket jelöljük, a többi megállás általános marad:
+
+| Bolt | Jelölő |
+| --- | --- |
+| Lidl | sárga korong, piros **L** |
+| Spar (Intersparral) | piros korong, fehér **S** |
+| Aldi | sötétkék korong, fehér **A** |
+| Penny | piros korong, fehér **P** |
+| OBI | narancs korong, fehér **OBI** |
+| Árkád | kék korong, fehér **Á** |
+| ETO Park | zöld korong, fehér **ETO** |
+| Egyéb pláza (`shop=mall`) | lila korong, fehér **PL** |
+
+A jelölő **kör alakú, márkaszínű jelzés – saját rajz, nem a lánc logója**: a
+logók védjegyoltalom alatt állnak, ezért a szín és a betűjel azonosít. A bolt
+neve a lebegő kártyára kerül ("Lidl · 4:12"), így a hasonló betűjelek sem
+keverhetők össze. A tankolás megmaradt, minden más hely (iroda, étterem,
+látnivaló) általános megállás lett. Két egymás melletti lánc esetén a típus
+marad bolt, csak a lánc és a név marad el.
+
+A név egyeztetése szóhatárra megy, így a "Mobil Pont" nem OBI és a
+"Takarékspar" nem SPAR. A típus a megállás időtartama, GPS-pontossága,
+közúttól mért távolsága és az OpenStreetMap közeli helyei alapján **becslés**.
+Egy bolt közelsége önmagában nem jelenti, hogy vásároltál: az út mellett,
+forgalomban állva a megállás úton állás marad. Egy közeli lámpa sem
+bizonyítja, hogy piros volt.
+
+Az ikonra koppintva megjelenik a megállás kezdete, az időtartam és a
+besorolás oka; a **Típus javítása** választással a helyes kategória
+eltárolható a telefonon, az automatikus besorolás pedig visszaállítható.
+Internet nélkül is vannak általános megállásjelölők. A helyazonosítás a
+`POST /api/track/stops` végponton fut; az OSM-helyeket hét napig
+gyorsítótárazzuk. Ehhez a szerver az érintett megállók környezetét
+lekérdezi az Overpass szolgáltatástól – de csak az egy percnél hosszabb
+megállásokét, hogy a sok rövid lámpás állás ne élje fel a keretet.
+
+A lekérdezés szándékosan csak kulcsra szűr (`[shop]`, `[amenity=fuel]`) 150
+méteres sugárral, és nem kéri le az utak geometriáját. Mérve: a korábbi,
+névre illesztő és útgeometriát is kérő alak 40 másodperc alatt sem jött
+vissza, a mostani tíz másodperc körül megvan. A láncokra a szerver szűr, a
+válaszból.
 
 ### 1.4 – Egyszerűbb útvonalnézet
 
@@ -751,3 +890,45 @@ mentett utak nem évülnek el, és kiváltják az automatikus tételt. A teljes
 szerverválasz is eltevődik, így a terv net nélkül is megnyitható. Az
 automatikus tételek a szerverre nem kerülnek fel, csak a kézzel mentettek.
 Adatbázis-séma: 7 → 8 (`saved_routes.autoSaved`), migrációval.
+
+### 1.7 – Megállások másodpercre, lámpa vagy forgalom, boltréteg
+
+A megállásfelismerés egy másodperctől jelöl, a hosszt csak az álló pontokra
+méri, és minden jelölő alatt egy kis lebegő kártya mutatja a megállás idejét.
+Az úton állás szétvált **lámpánál állásra** és **forgalomban állásra**; a
+döntés a már letöltött lámpa- és úthálózati rétegből megy, hálózat nélkül is.
+
+A boltok közül a Lidl, Spar, Aldi, Penny, OBI, Árkád, ETO Park és a plázák
+kapnak jelölést, kör alakú márkaszínű jelzővel. Ugyanezek **állandó
+térképrétegként** is látszanak, nem csak a megállásoknál. A bolti OSM-lekérdezés
+csak kulcsra szűr és nem kéri az utak geometriáját: a korábbi alak Győrben 40
+másodperc alatt sem jött vissza, ez tíz körül megvan. Adatbázis-séma nem
+változott; a `road_points.kind` egy új értéket (`SHOP`) vett fel.
+
+### 1.8 – Megrajzolt területek, saját logók
+
+Új webes felület a szerveren: sokszöggel megrajzolt, címkézett területek
+saját logóval (lásd *Területek*). A telefon a logókat körben mutatja a
+térképen és a beleeső megállásoknál; a terület minden becslést felülír.
+Adatbázis-séma a telefonon nem változott (a területek fájlban vannak); a
+szerveren új tábla: `map_areas`.
+
+### 1.9 – Egymásba rajzolt területek
+
+Ha egy megállás több területbe is esik (egy bolt a plázán belül), a valódi
+területre nézve kisebb nyer – a szerveren és a telefonon ugyanazzal a
+képlettel. Korábban a befoglaló téglalapot vetettük össze, és egy átlós belső
+terület döntetlenre futott ki a körülötte lévővel. A térképen (weben és a
+telefonon is) a nagyobb kerül alulra, a kisebb fölé, a névtől függetlenül; így
+a belső területre rá lehet kattintani, és a logója sem bújik el. Rajzolás
+közben egy meglévő terület logójára kattintva is lekerül a pont.
+
+### 1.10 – Területek: be- és kilépés, összeadott idő
+
+Bolt típusú (és más gyalog bejárt) területeken a be- és kilépésekből
+összeadott idő az egyetlen adat egy úton; egy belső területre átmenni
+kilépés a külsőből. Korábban egy ETO Parkos bevásárlás 4–5 külön megállásra
+esett szét a séta, az épületbeli GPS-kiesés és a szüneteltetés miatt; a mai
+utad 4 ETO Park + 1 Aldi helyett így „ETO Park 11:56, Aldi 4:16". A szerver és
+a telefon ugyanazt a szabályt futtatja; a telefonra JVM-es egységteszt került
+(`app/src/test`), amely a szerver tesztjeivel azonos eseteket ellenőriz.

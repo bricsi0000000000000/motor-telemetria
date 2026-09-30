@@ -53,6 +53,19 @@ object ApiClient {
         }
     }
 
+    /** Nyers bájtok (pl. egy terület logója). */
+    fun getBytes(path: String, readTimeoutMs: Int = READ_TIMEOUT_MS): ByteArray {
+        val connection = open(path, "GET", readTimeoutMs)
+        connection.setRequestProperty("Accept", "image/*")
+        try {
+            val code = connection.responseCode
+            if (code !in 200..299) throw ApiException(code, "HTTP $code")
+            return connection.inputStream.use { it.readBytes() }
+        } finally {
+            connection.disconnect()
+        }
+    }
+
     private fun open(
         path: String,
         method: String,

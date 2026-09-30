@@ -49,7 +49,12 @@ object AnalysisRepository {
                 val stored = dao.getAnalysis(track.id)
                 // Ha a túra azóta nem nőtt, a tárolt elemzés érvényes.
                 if (stored != null && stored.pointCount >= track.pointCount) {
-                    parse(stored)?.let { return@withContext Result.success(it) }
+                    parse(stored)?.let { analysis ->
+                        val telemetryCount = analysis.summary?.telemetry?.sampleCount ?: 0
+                        if (track.telemetrySampleCount == 0 || telemetryCount >= track.telemetrySampleCount) {
+                            return@withContext Result.success(analysis)
+                        }
+                    }
                 }
             }
 
@@ -72,6 +77,33 @@ object AnalysisRepository {
                 analysis
             }
         }
+
+    suspend fun labelIncident(
+        context: Context,
+        track: Track,
+        eventId: Long,
+        label: String
+    ): Result<TrackAnalysis> = withContext(Dispatchers.IO) {
+        val remoteId = track.remoteId
+            ?: return@withContext Result.failure(NotSyncedException())
+        runCatching {
+            ApiClient.postJson(
+                "/api/tracks/$remoteId/events/$eventId/label",
+                JSONObject().put("label", label)
+            )
+            val json = ApiClient.getJson("/api/tracks/$remoteId/analysis")
+            val analysis = TrackAnalysis.parse(json)
+            AppDatabase.get(context).trackDao().saveAnalysis(
+                TrackAnalysisEntity(
+                    trackId = track.id,
+                    json = json.toString(),
+                    pointCount = analysis.pointCount,
+                    updatedAt = System.currentTimeMillis()
+                )
+            )
+            analysis
+        }
+    }
 
     private fun parse(entity: TrackAnalysisEntity): TrackAnalysis? =
         runCatching { TrackAnalysis.parse(JSONObject(entity.json)) }.getOrNull()

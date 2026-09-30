@@ -16,9 +16,10 @@ import androidx.sqlite.db.SupportSQLiteDatabase
         Place::class,
         GeoLabel::class,
         RoadPoint::class,
-        SavedRoute::class
+        SavedRoute::class,
+        TelemetrySample::class
     ],
-    version = 8,
+    version = 9,
     exportSchema = false
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -118,6 +119,29 @@ abstract class AppDatabase : RoomDatabase() {
             }
         }
 
+        /** Másodperces, összesített mozgás- és barométeradatok. */
+        internal val MIGRATION_8_9 = object : Migration(8, 9) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE tracks ADD COLUMN telemetryVersion INTEGER NOT NULL DEFAULT 0")
+                db.execSQL("ALTER TABLE tracks ADD COLUMN telemetrySampleCount INTEGER NOT NULL DEFAULT 0")
+                db.execSQL("ALTER TABLE tracks ADD COLUMN syncedTelemetrySamples INTEGER NOT NULL DEFAULT 0")
+                db.execSQL(
+                    "CREATE TABLE IF NOT EXISTS telemetry_samples (" +
+                        "trackId INTEGER NOT NULL, seq INTEGER NOT NULL, time INTEGER NOT NULL, " +
+                        "lat REAL, lon REAL, speedMps REAL NOT NULL, bearingDegrees REAL NOT NULL DEFAULT 0, " +
+                        "pressureHpa REAL, fusedAltitudeMeters REAL, " +
+                        "forwardMeanMps2 REAL NOT NULL, forwardMinMps2 REAL NOT NULL, forwardMaxMps2 REAL NOT NULL, " +
+                        "lateralMeanMps2 REAL NOT NULL, lateralRmsMps2 REAL NOT NULL, lateralPeakMps2 REAL NOT NULL, " +
+                        "verticalRmsMps2 REAL NOT NULL, verticalPeakMps2 REAL NOT NULL, " +
+                        "yawPeakRadS REAL NOT NULL, rollPeakRadS REAL NOT NULL, leanDegrees REAL, " +
+                        "mountQuality REAL NOT NULL, sampleCount INTEGER NOT NULL, flags INTEGER NOT NULL, " +
+                        "PRIMARY KEY(trackId, seq), FOREIGN KEY(trackId) REFERENCES tracks(id) ON DELETE CASCADE)"
+                )
+                db.execSQL("CREATE INDEX IF NOT EXISTS index_telemetry_samples_trackId ON telemetry_samples(trackId)")
+                db.execSQL("CREATE INDEX IF NOT EXISTS index_telemetry_samples_trackId_time ON telemetry_samples(trackId, time)")
+            }
+        }
+
         @Volatile
         private var instance: AppDatabase? = null
 
@@ -127,7 +151,10 @@ abstract class AppDatabase : RoomDatabase() {
                     context.applicationContext,
                     AppDatabase::class.java,
                     "motor-telemetria.db"
-                ).addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8).build().also { instance = it }
+                ).addMigrations(
+                    MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5,
+                    MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9
+                ).build().also { instance = it }
             }
     }
 }

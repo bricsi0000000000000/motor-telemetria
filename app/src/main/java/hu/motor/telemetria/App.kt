@@ -8,6 +8,7 @@ import hu.motor.telemetria.sync.SyncManager
 import hu.motor.telemetria.util.AutoSettings
 import hu.motor.telemetria.util.BikeBluetooth
 import hu.motor.telemetria.util.ThemeSettings
+import hu.motor.telemetria.util.TelemetrySettings
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -34,6 +35,7 @@ class App : Application() {
         // A választott (vagy a rendszertől örökölt) nappali/éjszakai mód még az
         // első képernyő létrejötte előtt álljon be.
         ThemeSettings.init(this)
+        TelemetrySettings.init(this)
 
         // Szerverbeállítások és szinkron: az indításkor felfedezett elmaradást
         // (offline töltött túrákat) a SyncManager magától elkezdi feltölteni.

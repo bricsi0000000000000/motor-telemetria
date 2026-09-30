@@ -8,6 +8,7 @@ import android.util.Log
 import hu.motor.telemetria.data.AppDatabase
 import hu.motor.telemetria.data.Track
 import hu.motor.telemetria.data.TrackPoint
+import hu.motor.telemetria.data.TelemetrySample
 import hu.motor.telemetria.net.ApiClient
 import hu.motor.telemetria.net.ServerSettings
 import hu.motor.telemetria.service.TrackingState
@@ -52,6 +53,7 @@ object SyncManager {
 
     /** Túránként ennyi pont megy egy körben – így egy hosszú túra sem eszi meg a memóriát. */
     private const val POINTS_PER_TRACK = 1500
+    private const val TELEMETRY_PER_TRACK = 3000
 
     /** Ennyi kör után abbahagyjuk; a maradék a következő szinkronra marad. */
     private const val MAX_ROUNDS = 20
@@ -129,11 +131,18 @@ object SyncManager {
         }
 
         var sentPoints = 0
+        var sentTelemetry = 0
         val trackArray = JSONArray()
         for (track in tracks) {
             val points = dao.getPointsFrom(track.id, track.syncedPoints, POINTS_PER_TRACK)
+            val telemetry = dao.getTelemetryFrom(
+                track.id,
+                track.syncedTelemetrySamples,
+                TELEMETRY_PER_TRACK
+            )
             sentPoints += points.size
-            trackArray.put(trackJson(track, points))
+            sentTelemetry += telemetry.size
+            trackArray.put(trackJson(track, points, telemetry))
         }
         payload.put("tracks", trackArray)
 
@@ -147,7 +156,11 @@ object SyncManager {
             dao.markUploaded(
                 id = track.id,
                 remoteId = result.optLong("serverId").takeIf { it > 0 },
-                syncedPoints = result.optInt("storedPoints", track.syncedPoints)
+                syncedPoints = result.optInt("storedPoints", track.syncedPoints),
+                syncedTelemetrySamples = result.optInt(
+                    "storedTelemetrySamples",
+                    track.syncedTelemetrySamples
+                )
             )
             dao.clearDirtyIfUnchanged(
                 id = track.id,
@@ -160,10 +173,15 @@ object SyncManager {
         if (deletes.isNotEmpty()) dao.clearPendingDeletes(deletes)
 
         // Ha a pontok elfogytak a keretből, biztosan van még mit küldeni.
-        return sentPoints >= POINTS_PER_TRACK || tracks.size >= TRACKS_PER_REQUEST
+        return sentPoints >= POINTS_PER_TRACK || sentTelemetry >= TELEMETRY_PER_TRACK ||
+            tracks.size >= TRACKS_PER_REQUEST
     }
 
-    private fun trackJson(track: Track, points: List<TrackPoint>): JSONObject {
+    private fun trackJson(
+        track: Track,
+        points: List<TrackPoint>,
+        telemetry: List<TelemetrySample>
+    ): JSONObject {
         val json = JSONObject()
         json.put("clientId", track.id)
         json.put("startTime", track.startTime)
@@ -174,6 +192,8 @@ object SyncManager {
         json.put("maxSpeedMps", track.maxSpeedMps)
         json.put("elevationGainMeters", track.elevationGainMeters)
         json.put("pointCount", track.pointCount)
+        json.put("telemetryVersion", track.telemetryVersion)
+        json.put("telemetrySampleCount", track.telemetrySampleCount)
 
         val array = JSONArray()
         points.forEachIndexed { index, point ->
@@ -191,6 +211,35 @@ object SyncManager {
             array.put(item)
         }
         json.put("points", array)
+
+        json.put("telemetrySamples", JSONArray().apply {
+            telemetry.forEach { sample ->
+                put(JSONObject().apply {
+                    put("seq", sample.seq)
+                    put("time", sample.time)
+                    put("lat", sample.lat ?: JSONObject.NULL)
+                    put("lon", sample.lon ?: JSONObject.NULL)
+                    put("speedMps", sample.speedMps)
+                    put("bearingDegrees", sample.bearingDegrees)
+                    put("pressureHpa", sample.pressureHpa ?: JSONObject.NULL)
+                    put("fusedAltitudeMeters", sample.fusedAltitudeMeters ?: JSONObject.NULL)
+                    put("forwardMeanMps2", sample.forwardMeanMps2)
+                    put("forwardMinMps2", sample.forwardMinMps2)
+                    put("forwardMaxMps2", sample.forwardMaxMps2)
+                    put("lateralMeanMps2", sample.lateralMeanMps2)
+                    put("lateralRmsMps2", sample.lateralRmsMps2)
+                    put("lateralPeakMps2", sample.lateralPeakMps2)
+                    put("verticalRmsMps2", sample.verticalRmsMps2)
+                    put("verticalPeakMps2", sample.verticalPeakMps2)
+                    put("yawPeakRadS", sample.yawPeakRadS)
+                    put("rollPeakRadS", sample.rollPeakRadS)
+                    put("leanDegrees", sample.leanDegrees ?: JSONObject.NULL)
+                    put("mountQuality", sample.mountQuality)
+                    put("sampleCount", sample.sampleCount)
+                    put("flags", sample.flags)
+                })
+            }
+        })
         return json
     }
 
@@ -223,6 +272,8 @@ object SyncManager {
             put("accuracyMeters", state.accuracyMeters)
             put("pointCount", state.pointCount)
             put("hasFix", state.hasFix)
+            put("telemetryEnabled", state.telemetryEnabled)
+            put("telemetryQuality", state.telemetryQuality)
         }
         scope.launch {
             runCatching { ApiClient.postJson("/api/live", payload) }

@@ -26,9 +26,11 @@ import hu.motor.telemetria.data.AppDatabase
 import hu.motor.telemetria.data.Place
 import hu.motor.telemetria.data.Track
 import hu.motor.telemetria.data.TrackPoint
+import hu.motor.telemetria.data.TelemetrySample
 import hu.motor.telemetria.sync.SyncManager
 import hu.motor.telemetria.util.AutoSettings
 import hu.motor.telemetria.util.Fmt
+import hu.motor.telemetria.util.TelemetrySettings
 import hu.motor.telemetria.widget.StatsWidgetRenderer
 import hu.motor.telemetria.widget.WidgetRenderer
 import kotlinx.coroutines.CoroutineScope
@@ -44,6 +46,9 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withContext
+import java.io.DataOutputStream
+import java.io.File
+import java.util.zip.GZIPOutputStream
 import java.util.concurrent.ExecutorService
 import java.util.concurrent.Executors
 
@@ -87,6 +92,7 @@ class TrackingService : Service(), LocationListener {
 
         /** Szintemelkedés-számláló hiszterézise (a GPS magasság zajos). */
         private const val ELEVATION_THRESHOLD_M = 4.0
+        private const val BARO_ELEVATION_THRESHOLD_M = 1.5
 
         /** Ilyen gyakran mentjük a túra összesítőjét, hogy crash esetén se vesszen el. */
         private const val CHECKPOINT_MS = 20_000L
@@ -162,6 +168,10 @@ class TrackingService : Service(), LocationListener {
     private var elevationGain = 0.0
     private var elevationRef = Double.NaN
     private var pointCount = 0
+    private var telemetrySampleCount = 0
+    private var telemetrySeq = 0
+    private var telemetryElevationRef = Double.NaN
+    private var telemetryCollector: SensorTelemetryCollector? = null
 
     // --- automatikus lezárás ---------------------------------------------------
     /** A figyelt helyek; a mérés indulásakor töltjük be. */
@@ -223,9 +233,15 @@ class TrackingService : Service(), LocationListener {
         elevationGain = 0.0
         elevationRef = Double.NaN
         pointCount = 0
+        telemetrySampleCount = 0
+        telemetrySeq = 0
+        telemetryElevationRef = Double.NaN
         PathBuffer.clear()
 
-        _state.value = TrackingState(status = TrackingStatus.RUNNING)
+        _state.value = TrackingState(
+            status = TrackingStatus.RUNNING,
+            telemetryEnabled = TelemetrySettings.enabled
+        )
 
         goForeground()
         updateWidgets()
@@ -239,10 +255,18 @@ class TrackingService : Service(), LocationListener {
 
         scope.launch {
             dao.deleteEmptyUnfinished()
-            trackId = dao.insertTrack(Track(startTime = startedAt))
+            trackId = dao.insertTrack(
+                Track(
+                    startTime = startedAt,
+                    telemetryVersion = if (
+                        TelemetrySettings.enabled && SensorTelemetryCollector.canCollect(this@TrackingService)
+                    ) 1 else 0
+                )
+            )
             getSharedPreferences(PREFS, MODE_PRIVATE).edit()
                 .putLong(KEY_ACTIVE_TRACK, trackId).apply()
             _state.value = _state.value.copy(trackId = trackId)
+            withContext(Dispatchers.Main) { startTelemetry() }
         }
     }
 
@@ -250,6 +274,7 @@ class TrackingService : Service(), LocationListener {
         if (_state.value.status != TrackingStatus.RUNNING) return
         pausedAt = System.currentTimeMillis()
         lastLocation = null
+        stopTelemetry()
         resetAutoPauseState()
         // A GPS szünet alatt is figyel, csak ritkábban: ebből látjuk, ha újra elindulunk.
         stopLocationUpdates()
@@ -271,6 +296,7 @@ class TrackingService : Service(), LocationListener {
         _state.value = _state.value.copy(status = TrackingStatus.RUNNING)
         stopLocationUpdates()
         startLocationUpdates()
+        startTelemetry()
         updateNotification()
         updateWidgets()
     }
@@ -286,6 +312,7 @@ class TrackingService : Service(), LocationListener {
         }
 
         stopLocationUpdates()
+        stopTelemetry()
         ticker?.cancel()
         releaseWakeLock()
 
@@ -327,7 +354,8 @@ class TrackingService : Service(), LocationListener {
                     movingMillis = moving,
                     maxSpeedMps = maxSpeed,
                     elevationGainMeters = elev,
-                    pointCount = points
+                    pointCount = points,
+                    telemetrySampleCount = dao.countTelemetry(id)
                 )
             }
             getSharedPreferences(PREFS, MODE_PRIVATE).edit().remove(KEY_ACTIVE_TRACK).apply()
@@ -354,7 +382,11 @@ class TrackingService : Service(), LocationListener {
             return
         }
 
-        _state.value = TrackingState(status = TrackingStatus.RUNNING, trackId = savedId)
+        _state.value = TrackingState(
+            status = TrackingStatus.RUNNING,
+            trackId = savedId,
+            telemetryEnabled = TelemetrySettings.enabled
+        )
         arrivedSince = 0L
         resetAutoPauseState()
         loadAutoPlaces()
@@ -376,6 +408,9 @@ class TrackingService : Service(), LocationListener {
             maxSpeedMps = track.maxSpeedMps
             elevationGain = track.elevationGainMeters
             pointCount = saved.size
+            telemetrySampleCount = dao.countTelemetry(savedId)
+            telemetrySeq = telemetrySampleCount
+            telemetryElevationRef = Double.NaN
             // A kiesett időt szünetnek könyveljük el, hogy ne ugorjon meg az időmérő.
             val lastPointTime = saved.lastOrNull()?.time ?: track.startTime
             pausedTotalMs = (System.currentTimeMillis() - lastPointTime).coerceAtLeast(0L)
@@ -398,6 +433,7 @@ class TrackingService : Service(), LocationListener {
                 )
                 acquireWakeLock()
                 startLocationUpdates()
+                startTelemetry()
                 startTicker()
             }
         }
@@ -444,6 +480,13 @@ class TrackingService : Service(), LocationListener {
 
         val now = System.currentTimeMillis()
         val speed = if (location.hasSpeed()) location.speed else 0f
+        telemetryCollector?.updateLocation(
+            location.latitude,
+            location.longitude,
+            speed,
+            if (location.hasBearing()) location.bearing else 0f,
+            if (location.hasAltitude()) location.altitude else null
+        )
         val previous = lastLocation
 
         var movedMeters = 0.0
@@ -462,7 +505,7 @@ class TrackingService : Service(), LocationListener {
 
         if (speed > maxSpeedMps) maxSpeedMps = speed
 
-        if (location.hasAltitude()) {
+        if (location.hasAltitude() && telemetryCollector?.providesBarometricAltitude != true) {
             val alt = location.altitude
             if (elevationRef.isNaN()) {
                 elevationRef = alt
@@ -529,6 +572,88 @@ class TrackingService : Service(), LocationListener {
 
     override fun onProviderDisabled(provider: String) = Unit
 
+    // --- nagyfrekvenciás szenzortelemetria ------------------------------------
+
+    private fun startTelemetry() {
+        if (!TelemetrySettings.enabled || telemetryCollector != null || trackId == 0L) return
+        if (!SensorTelemetryCollector.canCollect(this)) return
+        telemetryCollector = SensorTelemetryCollector(
+            this,
+            onEventClip = { clip ->
+                val id = trackId
+                if (id != 0L) scope.launch { saveEventClip(id, clip) }
+            }
+        ) { aggregate ->
+            val id = trackId
+            if (id == 0L) return@SensorTelemetryCollector
+            scope.launch {
+                aggregate.fusedAltitudeMeters?.let { altitude ->
+                    if (telemetryElevationRef.isNaN()) {
+                        telemetryElevationRef = altitude
+                    } else if (altitude - telemetryElevationRef >= BARO_ELEVATION_THRESHOLD_M) {
+                        elevationGain += altitude - telemetryElevationRef
+                        telemetryElevationRef = altitude
+                    } else if (altitude < telemetryElevationRef) {
+                        telemetryElevationRef = altitude
+                    }
+                }
+                val seq = telemetrySeq++
+                dao.insertTelemetry(
+                    TelemetrySample(
+                        trackId = id,
+                        seq = seq,
+                        time = aggregate.time,
+                        lat = aggregate.lat,
+                        lon = aggregate.lon,
+                        speedMps = aggregate.speedMps,
+                        bearingDegrees = aggregate.bearingDegrees,
+                        pressureHpa = aggregate.pressureHpa,
+                        fusedAltitudeMeters = aggregate.fusedAltitudeMeters,
+                        forwardMeanMps2 = aggregate.forwardMeanMps2,
+                        forwardMinMps2 = aggregate.forwardMinMps2,
+                        forwardMaxMps2 = aggregate.forwardMaxMps2,
+                        lateralMeanMps2 = aggregate.lateralMeanMps2,
+                        lateralRmsMps2 = aggregate.lateralRmsMps2,
+                        lateralPeakMps2 = aggregate.lateralPeakMps2,
+                        verticalRmsMps2 = aggregate.verticalRmsMps2,
+                        verticalPeakMps2 = aggregate.verticalPeakMps2,
+                        yawPeakRadS = aggregate.yawPeakRadS,
+                        rollPeakRadS = aggregate.rollPeakRadS,
+                        leanDegrees = aggregate.leanDegrees,
+                        mountQuality = aggregate.mountQuality,
+                        sampleCount = aggregate.sampleCount,
+                        flags = aggregate.flags
+                    )
+                )
+                telemetrySampleCount = telemetrySeq
+                _state.value = _state.value.copy(telemetryQuality = aggregate.mountQuality)
+            }
+        }.also { it.start() }
+        scope.launch { dao.markTelemetryEnabled(trackId) }
+    }
+
+    /** 10 mp előzmény + legfeljebb 20 mp utózmény, tömörített bináris klip. */
+    private fun saveEventClip(id: Long, clip: SensorEventClip) {
+        val directory = File(filesDir, "telemetry_clips").apply { mkdirs() }
+        val file = File(directory, "track-${id}-${clip.triggerTime}.bin.gz")
+        DataOutputStream(GZIPOutputStream(file.outputStream())).use { output ->
+            output.writeInt(1) // formátumverzió
+            output.writeLong(clip.triggerTime)
+            output.writeInt(clip.frames.size)
+            clip.frames.forEach { frame ->
+                output.writeLong(frame.timeNanos)
+                output.writeFloat(frame.x)
+                output.writeFloat(frame.y)
+                output.writeFloat(frame.z)
+            }
+        }
+    }
+
+    private fun stopTelemetry() {
+        telemetryCollector?.stop()
+        telemetryCollector = null
+    }
+
     // --- időzítő és mentés -----------------------------------------------------
 
     private fun elapsedMillis(): Long {
@@ -546,8 +671,23 @@ class TrackingService : Service(), LocationListener {
             var sinceSync = 0L
             while (true) {
                 delay(1000L)
-                val current = _state.value
+                var current = _state.value
                 if (!current.isActive) continue
+
+                // A Beállítások kapcsolója aktív túra alatt is legfeljebb egy
+                // másodpercen belül életbe lép.
+                val telemetryEnabled = TelemetrySettings.enabled
+                if (current.status == TrackingStatus.RUNNING) {
+                    if (telemetryEnabled && telemetryCollector == null) startTelemetry()
+                    if (!telemetryEnabled && telemetryCollector != null) stopTelemetry()
+                }
+                if (current.telemetryEnabled != telemetryEnabled) {
+                    current = current.copy(
+                        telemetryEnabled = telemetryEnabled,
+                        telemetryQuality = if (telemetryEnabled) current.telemetryQuality else 0f
+                    )
+                    _state.value = current
+                }
 
                 val staleFix = current.hasFix &&
                     System.currentTimeMillis() - current.lastFixTime > 5000L
@@ -717,7 +857,8 @@ class TrackingService : Service(), LocationListener {
                 movingMillis = moving,
                 maxSpeedMps = maxSpeed,
                 elevationGainMeters = elev,
-                pointCount = points
+                pointCount = points,
+                telemetrySampleCount = telemetrySampleCount
             )
         }
     }
@@ -851,6 +992,7 @@ class TrackingService : Service(), LocationListener {
 
     override fun onDestroy() {
         stopLocationUpdates()
+        stopTelemetry()
         ticker?.cancel()
         releaseWakeLock()
         // Ha kilövik alólunk a szolgáltatást, legalább az utolsó összesítő menjen ki.
@@ -864,7 +1006,8 @@ class TrackingService : Service(), LocationListener {
                     movingMillis = movingMillis,
                     maxSpeedMps = maxSpeedMps,
                     elevationGainMeters = elevationGain,
-                    pointCount = pointCount
+                    pointCount = pointCount,
+                    telemetrySampleCount = telemetrySampleCount
                 )
             }
         }

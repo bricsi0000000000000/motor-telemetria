@@ -55,7 +55,54 @@ db.exec(`
   ) WITHOUT ROWID
 `)
 
+for (const column of [
+  'telemetry_version INTEGER NOT NULL DEFAULT 0',
+  'telemetry_sample_count INTEGER NOT NULL DEFAULT 0'
+]) {
+  try { db.exec(`ALTER TABLE tracks ADD COLUMN ${column}`) } catch { /* már megvan */ }
+}
+
+db.exec(`
+  CREATE TABLE IF NOT EXISTS telemetry_samples (
+    track_id            INTEGER NOT NULL REFERENCES tracks(id) ON DELETE CASCADE,
+    seq                 INTEGER NOT NULL,
+    time                INTEGER NOT NULL,
+    lat                 REAL,
+    lon                 REAL,
+    speed_mps           REAL NOT NULL DEFAULT 0,
+    bearing_deg         REAL NOT NULL DEFAULT 0,
+    matched_lat         REAL,
+    matched_lon         REAL,
+    road_bearing_deg    REAL,
+    pressure_hpa        REAL,
+    fused_altitude_m    REAL,
+    forward_mean_mps2   REAL NOT NULL DEFAULT 0,
+    forward_min_mps2    REAL NOT NULL DEFAULT 0,
+    forward_max_mps2    REAL NOT NULL DEFAULT 0,
+    lateral_mean_mps2   REAL NOT NULL DEFAULT 0,
+    lateral_rms_mps2    REAL NOT NULL DEFAULT 0,
+    lateral_peak_mps2   REAL NOT NULL DEFAULT 0,
+    vertical_rms_mps2   REAL NOT NULL DEFAULT 0,
+    vertical_peak_mps2  REAL NOT NULL DEFAULT 0,
+    yaw_peak_rads       REAL NOT NULL DEFAULT 0,
+    roll_peak_rads      REAL NOT NULL DEFAULT 0,
+    lean_degrees        REAL,
+    mount_quality       REAL NOT NULL DEFAULT 0,
+    sample_count        INTEGER NOT NULL DEFAULT 0,
+    flags               INTEGER NOT NULL DEFAULT 0,
+    PRIMARY KEY (track_id, seq)
+  ) WITHOUT ROWID
+`)
+
+try { db.exec('ALTER TABLE telemetry_samples ADD COLUMN bearing_deg REAL NOT NULL DEFAULT 0') } catch {
+  // Már megvan.
+}
+for (const column of ['matched_lat REAL', 'matched_lon REAL', 'road_bearing_deg REAL']) {
+  try { db.exec(`ALTER TABLE telemetry_samples ADD COLUMN ${column}`) } catch { /* már megvan */ }
+}
+
 db.exec('CREATE INDEX IF NOT EXISTS idx_points_time ON track_points(track_id, time)')
+db.exec('CREATE INDEX IF NOT EXISTS idx_telemetry_time ON telemetry_samples(track_id, time)')
 db.exec('CREATE INDEX IF NOT EXISTS idx_tracks_start ON tracks(start_time DESC)')
 
 db.exec(`
@@ -68,6 +115,25 @@ db.exec(`
     created_at     INTEGER NOT NULL
   )
 `)
+
+try { db.exec('ALTER TABLE track_analysis ADD COLUMN telemetry_count INTEGER NOT NULL DEFAULT 0') } catch {
+  // Már megvan.
+}
+
+db.exec(`
+  CREATE TABLE IF NOT EXISTS ride_events (
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    track_id    INTEGER NOT NULL REFERENCES tracks(id) ON DELETE CASCADE,
+    event_time  INTEGER NOT NULL,
+    kind        TEXT    NOT NULL,
+    score       REAL    NOT NULL DEFAULT 0,
+    label       TEXT,
+    created_at  INTEGER NOT NULL,
+    updated_at  INTEGER NOT NULL,
+    UNIQUE(track_id, event_time, kind)
+  )
+`)
+db.exec('CREATE INDEX IF NOT EXISTS idx_ride_events_track ON ride_events(track_id, event_time)')
 
 db.exec(`
   CREATE TABLE IF NOT EXISTS road_points (
@@ -182,6 +248,7 @@ db.exec(`
     payload     TEXT    NOT NULL,
     -- A gyorsítótár kulcsa: ha a túra pontszáma nőtt, újra kell illeszteni.
     point_count INTEGER NOT NULL,
+    telemetry_count INTEGER NOT NULL DEFAULT 0,
     matched_m   REAL    NOT NULL DEFAULT 0,
     unmatched   INTEGER NOT NULL DEFAULT 0,
     status      TEXT    NOT NULL DEFAULT 'ok',
@@ -189,6 +256,10 @@ db.exec(`
     created_at  INTEGER NOT NULL
   )
 `)
+
+try { db.exec('ALTER TABLE track_match ADD COLUMN telemetry_count INTEGER NOT NULL DEFAULT 0') } catch {
+  // Már megvan.
+}
 
 db.exec(`
   CREATE TABLE IF NOT EXISTS ride_profile (
@@ -257,6 +328,34 @@ db.exec(`
     updated_at INTEGER NOT NULL
   )
 `)
+
+db.exec(`
+  CREATE TABLE IF NOT EXISTS map_areas (
+    -- Kézzel megrajzolt, címkézett területek a webes felületről. Ezek
+    -- erősebbek az OpenStreetMap-becslésnél: ha egy megállás ide esik, a
+    -- találgatásnak vége, ez a hely.
+    id         INTEGER PRIMARY KEY AUTOINCREMENT,
+    name       TEXT    NOT NULL,
+    -- Melyik megállástípust adja: SHOP | FUEL | PLACE | PARKING | SIGNAL | ROAD
+    kind       TEXT    NOT NULL DEFAULT 'SHOP',
+    note       TEXT,
+    -- A sokszög pontjai JSON-ben: [[lat,lon], ...]
+    polygon    TEXT    NOT NULL,
+    -- Befoglaló téglalap, hogy a keresés ne olvassa végig az összeset.
+    min_lat    REAL    NOT NULL DEFAULT 0,
+    max_lat    REAL    NOT NULL DEFAULT 0,
+    min_lon    REAL    NOT NULL DEFAULT 0,
+    max_lon    REAL    NOT NULL DEFAULT 0,
+    -- A feltöltött logó; a telefon körbe vágva rajzolja ki.
+    logo       BLOB,
+    logo_mime  TEXT,
+    logo_at    INTEGER,
+    created_at INTEGER NOT NULL,
+    updated_at INTEGER NOT NULL
+  )
+`)
+
+db.exec('CREATE INDEX IF NOT EXISTS idx_areas_bbox ON map_areas(min_lat, max_lat, min_lon, max_lon)')
 
 db.exec('CREATE INDEX IF NOT EXISTS idx_calibration_usable ON model_calibration(usable, ratio)')
 

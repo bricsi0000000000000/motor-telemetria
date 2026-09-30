@@ -148,13 +148,8 @@ class StatsFragment : Fragment() {
                         Fmt.meters(summary.biggestClimb?.elevationDeltaMeters ?: 0.0),
                         summary.fastSectionCount
                     )
-                    // A limit feletti hányad a "beszédes" szám, azt emeljük ki.
-                    val above = summary.limit.aboveShare
-                    row.tvSectionValue.text = Fmt.percent(above)
-                    val color = ContextCompat.getColor(
-                        requireContext(),
-                        if (above > 0.05) R.color.speeding else R.color.brand
-                    )
+                    row.tvSectionValue.text = Fmt.kmh(summary.maxKmh)
+                    val color = ContextCompat.getColor(requireContext(), R.color.brand)
                     row.marker.backgroundTintList = ColorStateList.valueOf(color)
                     row.tvSectionValue.setTextColor(color)
                 }

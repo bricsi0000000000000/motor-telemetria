@@ -10,6 +10,14 @@
 
     <!-- Térkép -->
     <color name="track">#FF2563EB</color>
+    <color name="speed_0">#FF000000</color>
+    <color name="speed_10">#FF16A34A</color>
+    <color name="speed_30">#FFFACC15</color>
+    <color name="speed_50">#FFF97316</color>
+    <color name="speed_69">#FF38BDF8</color>
+    <color name="speed_90">#FF1D4ED8</color>
+    <color name="speed_120">#FFEC4899</color>
+    <color name="speed_over_120">#FF7E22CE</color>
     <color name="position">#FF0D9488</color>
     <color name="accuracy_fill">#220D9488</color>
     <color name="accuracy_stroke">#660D9488</color>

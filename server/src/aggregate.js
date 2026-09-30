@@ -77,15 +77,21 @@ const trafficSignals = () =>
 export async function matchTrack(trackId, { force = false } = {}) {
   const track = one('SELECT * FROM tracks WHERE id = ?', trackId)
   if (!track) return { trackId, status: 'skipped', reason: 'nincs ilyen túra' }
+  const telemetryCount = one(
+    'SELECT COUNT(*) AS count FROM telemetry_samples WHERE track_id = ?', trackId
+  ).count
 
-  const existing = one('SELECT point_count, status FROM track_match WHERE track_id = ?', trackId)
-  if (!force && existing && existing.point_count === track.point_count) {
+  const existing = one(
+    'SELECT point_count, telemetry_count, status FROM track_match WHERE track_id = ?', trackId
+  )
+  if (!force && existing && existing.point_count === track.point_count &&
+      existing.telemetry_count === telemetryCount) {
     return { trackId, status: 'cached' }
   }
 
   const points = trackPoints(trackId)
   if (points.length < 30) {
-    saveMatch(trackId, null, points.length, { status: 'skipped', error: 'túl kevés pont' })
+    saveMatch(trackId, null, points.length, telemetryCount, { status: 'skipped', error: 'túl kevés pont' })
     return { trackId, status: 'skipped', reason: 'túl kevés pont' }
   }
 
@@ -93,17 +99,17 @@ export async function matchTrack(trackId, { force = false } = {}) {
   try {
     trace = await traceAttributes(points, 'map_snap')
   } catch (error) {
-    saveMatch(trackId, null, points.length, { status: 'failed', error: error.message })
+    saveMatch(trackId, null, points.length, telemetryCount, { status: 'failed', error: error.message })
     return { trackId, status: 'failed', reason: error.message }
   }
 
   if (trace.shape.length < 3) {
-    saveMatch(trackId, null, points.length, { status: 'failed', error: 'nem sikerült illeszteni' })
+    saveMatch(trackId, null, points.length, telemetryCount, { status: 'failed', error: 'nem sikerült illeszteni' })
     return { trackId, status: 'failed', reason: 'nem sikerült illeszteni' }
   }
 
   const payload = buildContribution(track, points, trace)
-  saveMatch(trackId, payload, points.length, {
+  saveMatch(trackId, payload, points.length, telemetryCount, {
     status: 'ok',
     matchedM: payload.matchedM,
     unmatched: payload.unmatched
@@ -116,6 +122,12 @@ export async function matchTrack(trackId, { force = false } = {}) {
  * itt dől el, melyik mért sebesség melyik kanyarosztályhoz tartozik.
  */
 function buildContribution(track, points, trace) {
+  const telemetryBySecond = new Map(
+    all(`SELECT seq, time, forward_mean_mps2 AS forwardMeanMps2, mount_quality AS mountQuality
+         FROM telemetry_samples WHERE track_id = ? AND mount_quality >= 0.65 ORDER BY seq`, track.id)
+      .map((sample) => [Math.round(sample.time / 1000), sample])
+  )
+  const usedTelemetry = new Set()
   // 1. A geometria: az ILLESZTETT vonal, nem a nyers GPS.
   const sampled = resample(trace.shape, STEP_M)
   const smoothed = smoothPath(sampled, 5)
@@ -213,7 +225,21 @@ function buildContribution(track, points, trace) {
     if (step.radius < ALAT_MAX_RADIUS_M) {
       addToHistogram(dynamics.aLat, ((point.speedMps ** 2) / step.radius) * DYN_SCALE)
     }
-    if (usable.pair) {
+    const telemetryKey = Math.round(point.time / 1000)
+    const sensorSample = telemetryBySecond.get(telemetryKey)
+    if (sensorSample && !usedTelemetry.has(telemetryKey)) {
+      usedTelemetry.add(telemetryKey)
+      // Ugyanarra az úthálózatra vetítjük a szenzormintát, amelyen a személyes
+      // sebességmodell tanul. Így párhuzamos út és felüljáró nem kerül egy cellába.
+      run(
+        `UPDATE telemetry_samples SET matched_lat = ?, matched_lon = ?, road_bearing_deg = ?
+         WHERE track_id = ? AND seq = ?`,
+        step.lat, step.lon, step.bearing, track.id, sensorSample.seq
+      )
+      const a = sensorSample.forwardMeanMps2
+      if (a > 0.05) addToHistogram(dynamics.accel, a * DYN_SCALE)
+      else if (a < -0.05) addToHistogram(dynamics.decel, -a * DYN_SCALE)
+    } else if (usable.pair) {
       const dt = (point.time - usable.pair.time) / 1000
       if (dt > 0 && dt < 6) {
         const a = (point.speedMps - usable.pair.speedMps) / dt
@@ -247,7 +273,8 @@ function buildContribution(track, points, trace) {
     steps: packSteps(steps),
     buckets: Object.fromEntries(buckets),
     cells: Object.fromEntries(cells),
-    dynamics
+    dynamics,
+    sensorDynamicsSamples: usedTelemetry.size
   }
 }
 
@@ -322,17 +349,20 @@ export function unpackSteps(packed) {
   return out
 }
 
-function saveMatch(trackId, payload, pointCount, { status, error = null, matchedM = 0, unmatched = 0 }) {
+function saveMatch(trackId, payload, pointCount, telemetryCount, { status, error = null, matchedM = 0, unmatched = 0 }) {
   tx(() => {
     subtractContribution(trackId)
     run(
-      `INSERT INTO track_match (track_id, payload, point_count, matched_m, unmatched, status, error, created_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+      `INSERT INTO track_match
+         (track_id, payload, point_count, telemetry_count, matched_m, unmatched, status, error, created_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
        ON CONFLICT(track_id) DO UPDATE SET
          payload = excluded.payload, point_count = excluded.point_count,
+         telemetry_count = excluded.telemetry_count,
          matched_m = excluded.matched_m, unmatched = excluded.unmatched,
          status = excluded.status, error = excluded.error, created_at = excluded.created_at`,
-      trackId, JSON.stringify(payload ?? {}), pointCount, matchedM, unmatched, status, error, Date.now()
+      trackId, JSON.stringify(payload ?? {}), pointCount, telemetryCount,
+      matchedM, unmatched, status, error, Date.now()
     )
     if (payload) addContribution(payload)
   })

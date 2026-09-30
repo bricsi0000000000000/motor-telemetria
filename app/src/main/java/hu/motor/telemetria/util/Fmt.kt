@@ -30,6 +30,12 @@ object Fmt {
         else String.format(hu, "%02d:%02d", m, s)
     }
 
+    /** Megállás hossza a térképi kártyán: "8 mp", "05:03", "1:05:03". */
+    fun stopDuration(millis: Long): String {
+        val seconds = (millis / 1000).coerceAtLeast(0)
+        return if (seconds < 60) "$seconds mp" else duration(millis)
+    }
+
     fun meters(value: Double): String = "${value.roundToInt()} m"
 
     /** Az elemzés eleve km/h-ban számol, itt már csak kiírni kell. */

@@ -28,8 +28,9 @@ android {
         applicationId = "hu.motor.telemetria"
         minSdk = 24
         targetSdk = 35
-        versionCode = 7
-        versionName = "1.6"
+        versionCode = 14
+        versionName = "1.13"
+        testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
         buildConfigField("String", "DEFAULT_BASE_URL", "\"${secret("motor.defaultBaseUrl")}\"")
         buildConfigField("String", "DEFAULT_TOKEN", "\"${secret("motor.defaultToken")}\"")
@@ -79,4 +80,9 @@ dependencies {
 
     // Ingyenes, kulcs nélküli OpenStreetMap térkép
     implementation("org.osmdroid:osmdroid-android:6.1.20")
+
+    // A telefonon futó szabályok (pl. terület-látogatás) egyezzenek a szerverével.
+    testImplementation("junit:junit:4.13.2")
+    androidTestImplementation("androidx.test.ext:junit:1.2.1")
+    androidTestImplementation("androidx.test:runner:1.6.2")
 }

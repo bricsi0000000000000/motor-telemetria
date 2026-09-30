@@ -27,12 +27,14 @@ import hu.motor.telemetria.databinding.ItemPlaceBinding
 import hu.motor.telemetria.net.ServerSettings
 import hu.motor.telemetria.net.ServiceCheck
 import hu.motor.telemetria.service.PlaceGeofences
+import hu.motor.telemetria.service.SensorTelemetryCollector
 import hu.motor.telemetria.sync.SyncManager
 import hu.motor.telemetria.sync.SyncStatus
 import hu.motor.telemetria.util.AutoSettings
 import hu.motor.telemetria.util.BikeBluetooth
 import hu.motor.telemetria.util.Fmt
 import hu.motor.telemetria.util.ThemeSettings
+import hu.motor.telemetria.util.TelemetrySettings
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
@@ -81,9 +83,49 @@ class SettingsActivity : AppCompatActivity() {
         binding.toolbar.setNavigationOnClickListener { finish() }
 
         setUpAuto()
+        setUpTelemetry()
         setUpServer()
         setUpSelfTest()
         setUpTheme()
+    }
+
+    private fun setUpTelemetry() {
+        binding.switchTelemetry.isChecked = TelemetrySettings.enabled
+        binding.switchTelemetry.setOnCheckedChangeListener { _, checked ->
+            TelemetrySettings.enabled = checked
+        }
+        fun renderCalibration() {
+            val quality = TelemetrySettings.calibrationQuality
+            binding.tvTelemetryCalibration.text = if (quality >= 1f) {
+                getString(R.string.telemetry_calibrated)
+            } else {
+                getString(R.string.telemetry_calibrating, (quality * 100).toInt())
+            }
+        }
+        binding.btnSensorInventory.setOnClickListener {
+            AlertDialog.Builder(this)
+                .setTitle(R.string.telemetry_inventory_title)
+                .setMessage(SensorTelemetryCollector.inventory(this))
+                .setPositiveButton(android.R.string.ok, null)
+                .show()
+        }
+        binding.btnResetCalibration.setOnClickListener {
+            TelemetrySettings.resetCalibration()
+            renderCalibration()
+            Toast.makeText(this, R.string.telemetry_reset_done, Toast.LENGTH_SHORT).show()
+        }
+        binding.btnManualMount.setOnClickListener {
+            val current = (TelemetrySettings.manualMountQuarterTurns ?: -1) + 1
+            AlertDialog.Builder(this)
+                .setTitle(R.string.telemetry_manual_mount_title)
+                .setSingleChoiceItems(R.array.telemetry_manual_mount_choices, current) { dialog, which ->
+                    TelemetrySettings.manualMountQuarterTurns = (which - 1).takeIf { it >= 0 }
+                    dialog.dismiss()
+                }
+                .setNegativeButton(android.R.string.cancel, null)
+                .show()
+        }
+        renderCalibration()
     }
 
     override fun onResume() {

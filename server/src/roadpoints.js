@@ -1,6 +1,7 @@
 import { all, run, tx } from './db.js'
 import { AREA_BBOX, bboxString, haversine, limitFor, overpass, tiles } from './overpass.js'
 import { extractPoints, findExtract, osmiumAvailable } from './localosm.js'
+import { shopBrand } from './observedstops.js'
 
 /**
  * Útmenti adatok a térképhez: fix sebességmérők, lámpás kereszteződések,
@@ -72,7 +73,7 @@ resetOnAreaChange()
 // --- rétegek állapota (mikor frissült, sikerült-e) ----------------------------
 
 /** A rétegek, amiket külön-külön követünk és külön-külön is frissülhetnek. */
-export const LAYERS = ['cameras', 'signals', 'speedlimits', 'waze']
+export const LAYERS = ['cameras', 'signals', 'shops', 'speedlimits', 'waze']
 
 function markLayer(layer, { status, count, error = null, touch = false }) {
   const previous = all('SELECT updated_at AS updatedAt, count FROM layer_state WHERE layer = ?', layer)[0]
@@ -211,6 +212,63 @@ out body;`)
   markLayer('cameras', { status: 'idle', count: cameras, touch: true })
   markLayer('signals', { status: 'idle', count: signals, touch: true })
   return { cameras, signals, points }
+}
+
+/**
+ * A jelölt üzletláncok a lefedett területen.
+ *
+ * Nem a megállásokhoz kell (azokat a `observedstops.js` keresi a nyomvonal
+ * mentén), hanem hogy a boltok végig látszódjanak a térképen. Ezért a teljes
+ * területre megy, csempénként, mint a mérők és a lámpák. A `[shop]` kulcsra
+ * szűrünk, a láncot itthon választjuk ki – értékre szűrő Overpass lekérdezés
+ * mérve többszörös időbe telik.
+ */
+export async function refreshShops() {
+  const now = Date.now()
+  const points = []
+  const seen = new Set()
+  let failed = 0
+
+  for (const tile of tiles(AREA_BBOX, POINT_TILE_DEGREES)) {
+    let response
+    try {
+      response = await overpass(`[out:json][timeout:120];nwr["shop"](${bboxString(tile)});out center tags;`)
+    } catch (error) {
+      failed++
+      console.warn(`Boltok, ${tile.label} csempe: ${error.message}`)
+      continue
+    }
+    for (const element of response.elements ?? []) {
+      const brand = shopBrand(element.tags)
+      if (!brand) continue
+      const place = element.center ?? element
+      if (!Number.isFinite(place.lat) || !Number.isFinite(place.lon)) continue
+      const externalId = `osm-shop-${element.type}-${element.id}`
+      if (seen.has(externalId)) continue
+      seen.add(externalId)
+      points.push({
+        source: 'osm-shop',
+        externalId,
+        kind: 'SHOP',
+        lat: place.lat,
+        lon: place.lon,
+        road: element.tags.name ?? element.tags.brand ?? null,
+        // A telefon ebből választ márkaszínt és betűjelet a jelölőhöz.
+        description: brand,
+        speedLimit: null,
+        reportedAt: null,
+        expiresAt: null
+      })
+    }
+  }
+
+  if (points.length === 0 && failed > 0) {
+    throw new Error(`egyetlen csempe sem jött össze (${failed} hiba)`)
+  }
+
+  replaceSource('osm-shop', points, now)
+  markLayer('shops', { status: 'idle', count: points.length, touch: true })
+  return { shops: points.length, points }
 }
 
 /**
@@ -667,6 +725,13 @@ export function startRefresh({ freeOnly = false, roads = false } = {}) {
     return result.cameras
   })) {
     started.push('cameras', 'signals')
+  }
+
+  if (startLayer('shops', async () => {
+    const result = await refreshShops()
+    return result.shops
+  })) {
+    started.push('shops')
   }
 
   if (ensureSpeedSegments({ force: roads })) started.push('speedlimits')

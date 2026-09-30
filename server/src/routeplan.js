@@ -10,6 +10,7 @@ import { speedProfile } from './profile.js'
 import { LEFT_TYPES } from './stops.js'
 import { loadModel, targetSpeed } from './ridermodel.js'
 import { estimateStops, signalsOnPath, countLeftTurns } from './stops.js'
+import { roadQualityForSteps } from './roadquality.js'
 import {
   valhallaRoute, traceAttributes, valhallaHeight, encodePolyline, RoutingError
 } from './routing.js'
@@ -20,6 +21,7 @@ import {
 
 /** A kanyargós jelölt nem lehet ennyiszer lassabb a leggyorsabbnál. */
 const CURVY_TIME_BUDGET = 1.4
+const COMFORT_TIME_BUDGET = 1.35
 
 /** A magasságot 100 méterenként kérdezzük; a lejtő ennél finomabban zaj. */
 const HEIGHT_EVERY = 5
@@ -52,6 +54,12 @@ const CANDIDATES = {
     { label: 'alternatívák', options: { alternates: 2 } },
     { label: 'lassú utak', options: { topSpeed: 70, useHighways: 0 } },
     { label: 'közepes utak', options: { topSpeed: 90, useHighways: 0 } },
+    { label: 'legrövidebb', options: { shortest: true } }
+  ],
+  COMFORT: [
+    { label: 'gyors', options: {} },
+    { label: 'alternatívák', options: { alternates: 2 } },
+    { label: 'lassú utak', options: { topSpeed: 70, useHighways: 0 } },
     { label: 'legrövidebb', options: { shortest: true } }
   ],
   // Az egérút jelöltjei menet közben állnak elő (a kizárandó pontokhoz előbb
@@ -397,6 +405,26 @@ async function gradeProfile(sampled) {
  * hosszabb út nem "élvezetes", hanem rossz.
  */
 function chooseplan(plans, style) {
+  if (style === 'COMFORT') {
+    const fastest = Math.min(...plans.map((plan) => plan.modelMovingMs))
+    const affordable = plans.filter((plan) => plan.modelMovingMs <= fastest * COMFORT_TIME_BUDGET)
+    const pool = affordable.length > 0 ? affordable : plans
+    for (const plan of pool) Object.assign(plan, roadQualityForSteps(plan.steps))
+    const measured = pool.filter((plan) => plan.roughnessCoverage > 0)
+    if (measured.length === 0) {
+      return pool.reduce((best, plan) => (plan.modelMovingMs < best.modelMovingMs ? plan : best))
+    }
+    const maxRoughness = Math.max(...measured.map((plan) => plan.roughnessScore), 0.01)
+    for (const plan of measured) {
+      const timeRatio = plan.modelMovingMs / fastest
+      const surfacePenalty = plan.roughnessScore / maxRoughness
+      const missingPenalty = (1 - plan.roughnessCoverage) * 0.35
+      // Az idő, az útminőség és a már meglévő kanyargóssági modell együtt dönt.
+      plan.comfortScore = timeRatio + surfacePenalty * 0.7 + missingPenalty - plan.twistiness * 0.15
+    }
+    return measured.reduce((best, plan) =>
+      plan.comfortScore < best.comfortScore ? plan : best)
+  }
   if (style !== 'CURVY') {
     return plans.reduce((best, plan) => (plan.modelMovingMs < best.modelMovingMs ? plan : best))
   }
@@ -524,6 +552,11 @@ function buildResponse(chosen, plans, model, style, waypoints, options) {
       trafficLights: chosen.signalsOnRoute.length,
       leftTurns: chosen.leftTurns
     },
+    comfort: style === 'COMFORT' ? {
+      score: round2(chosen.comfortScore ?? 0),
+      roughness: round2(chosen.roughnessScore ?? 0),
+      coverage: round2(chosen.roughnessCoverage ?? 0)
+    } : null,
     stops: stops.stops,
     alternatives: plans
       .filter((plan) => plan !== chosen)

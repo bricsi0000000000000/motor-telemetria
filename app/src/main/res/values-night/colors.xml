@@ -10,6 +10,14 @@
     <color name="on_surface">#FFE8EAEE</color>
 
     <color name="track">#FF5B9CFF</color>
+    <color name="speed_0">#FF000000</color>
+    <color name="speed_10">#FF16A34A</color>
+    <color name="speed_30">#FFFACC15</color>
+    <color name="speed_50">#FFF97316</color>
+    <color name="speed_69">#FF38BDF8</color>
+    <color name="speed_90">#FF1D4ED8</color>
+    <color name="speed_120">#FFEC4899</color>
+    <color name="speed_over_120">#FF7E22CE</color>
     <color name="position">#FF2DD4BF</color>
     <color name="accuracy_fill">#332DD4BF</color>
     <color name="accuracy_stroke">#772DD4BF</color>
